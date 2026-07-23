@@ -1,7 +1,10 @@
+import io
 import json
 import pytest
+import urllib.error
+from contextlib import contextmanager
 from datetime import datetime, timezone
-from usage_client import read_token, NoCredentialsError, parse_usage, UsageData, Window
+from usage_client import read_token, NoCredentialsError, parse_usage, UsageData, Window, fetch_usage, UsageError
 
 
 def _write_creds(tmp_path, obj):
@@ -52,3 +55,56 @@ def test_parse_usage_incomplete_window_is_none():
     data = parse_usage({"five_hour": {"utilization": 5.0}, "seven_day": {}}, datetime.now(timezone.utc))
     assert data.five_hour is None
     assert data.seven_day is None
+
+
+@contextmanager
+def _fake_response(body: bytes):
+    yield io.BytesIO(body)
+
+
+def _opener_returning(body: bytes):
+    def opener(req, timeout=None):
+        return _fake_response(body)
+    return opener
+
+
+def _opener_raising(exc):
+    def opener(req, timeout=None):
+        raise exc
+    return opener
+
+
+def test_fetch_usage_success(tmp_path):
+    path = _write_creds(tmp_path, {"claudeAiOauth": {"accessToken": "tok"}})
+    body = json.dumps(SAMPLE).encode("utf-8")
+    result = fetch_usage(path=path, opener=_opener_returning(body))
+    assert isinstance(result, UsageData)
+    assert result.seven_day.utilization == 71.0
+
+
+def test_fetch_usage_no_credentials(tmp_path):
+    result = fetch_usage(path=str(tmp_path / "yok.json"), opener=_opener_returning(b"{}"))
+    assert isinstance(result, UsageError)
+    assert result.kind == "no_credentials"
+
+
+def test_fetch_usage_unauthorized(tmp_path):
+    path = _write_creds(tmp_path, {"claudeAiOauth": {"accessToken": "tok"}})
+    exc = urllib.error.HTTPError("u", 401, "Unauthorized", {}, None)
+    result = fetch_usage(path=path, opener=_opener_raising(exc))
+    assert isinstance(result, UsageError)
+    assert result.kind == "unauthorized"
+
+
+def test_fetch_usage_network_error(tmp_path):
+    path = _write_creds(tmp_path, {"claudeAiOauth": {"accessToken": "tok"}})
+    result = fetch_usage(path=path, opener=_opener_raising(urllib.error.URLError("down")))
+    assert isinstance(result, UsageError)
+    assert result.kind == "network"
+
+
+def test_fetch_usage_bad_json(tmp_path):
+    path = _write_creds(tmp_path, {"claudeAiOauth": {"accessToken": "tok"}})
+    result = fetch_usage(path=path, opener=_opener_returning(b"not json"))
+    assert isinstance(result, UsageError)
+    assert result.kind == "bad_response"

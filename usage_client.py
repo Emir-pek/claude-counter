@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import json
 import os
+import urllib.error
+import urllib.request
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 
 CREDENTIALS_PATH = os.path.expanduser("~/.claude/.credentials.json")
 USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
@@ -57,3 +59,37 @@ def parse_usage(payload: dict, fetched_at: datetime) -> UsageData:
         seven_day=_parse_window(payload.get("seven_day")),
         fetched_at=fetched_at,
     )
+
+
+@dataclass
+class UsageError:
+    kind: str
+    message: str
+
+
+def fetch_usage(path: str = CREDENTIALS_PATH, url: str = USAGE_URL,
+                opener=urllib.request.urlopen) -> "UsageData | UsageError":
+    try:
+        token = read_token(path)
+    except NoCredentialsError:
+        return UsageError("no_credentials", "Claude oturumu bulunamadı")
+
+    req = urllib.request.Request(url, headers={
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+    })
+    try:
+        with opener(req, timeout=5) as resp:
+            body = resp.read()
+    except urllib.error.HTTPError as e:
+        if e.code == 401:
+            return UsageError("unauthorized", "Oturum süresi dolmuş — Claude Code'da giriş yapın")
+        return UsageError("network", f"Sunucu hatası ({e.code})")
+    except (urllib.error.URLError, TimeoutError, OSError):
+        return UsageError("network", "Bağlantı yok")
+
+    try:
+        payload = json.loads(body)
+    except (json.JSONDecodeError, ValueError):
+        return UsageError("bad_response", "Beklenmedik yanıt")
+    return parse_usage(payload, datetime.now(timezone.utc))
