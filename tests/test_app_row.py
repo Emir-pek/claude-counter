@@ -15,9 +15,14 @@ def root():
 
 
 def _win(hours_ahead: float, util: float = 42.0) -> Window:
+    # Sıfırlanmayı dakika ortasına koy: dakika sınırında (+2sa 0dk 0sn)
+    # Windows saat çözünürlüğü yüzünden geri sayım "2s 0dk" ile
+    # "1s 59dk" arasında değişebiliyor ve test flaky oluyor.
     return Window(
         utilization=util,
-        resets_at=datetime.now(timezone.utc) + timedelta(hours=hours_ahead),
+        resets_at=datetime.now(timezone.utc)
+        + timedelta(hours=hours_ahead)
+        + timedelta(seconds=30),
     )
 
 
