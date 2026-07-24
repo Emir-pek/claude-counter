@@ -47,7 +47,7 @@ class UsageApp(ctk.CTk):
     def __init__(self):
         super().__init__()
         self.title("Claude Kullanımı")
-        self.geometry("260x170")
+        self.geometry("260x235")
         self.resizable(False, False)
         self.attributes("-topmost", True)
         self.grid_columnconfigure(0, weight=1)
