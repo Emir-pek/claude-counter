@@ -108,3 +108,28 @@ def test_fetch_usage_bad_json(tmp_path):
     result = fetch_usage(path=path, opener=_opener_returning(b"not json"))
     assert isinstance(result, UsageError)
     assert result.kind == "bad_response"
+
+
+def test_fetch_usage_non_object_json(tmp_path):
+    path = _write_creds(tmp_path, {"claudeAiOauth": {"accessToken": "tok"}})
+    result = fetch_usage(path=path, opener=_opener_returning(b"null"))
+    assert isinstance(result, UsageError)
+    assert result.kind == "bad_response"
+
+
+def test_fetch_usage_json_list(tmp_path):
+    path = _write_creds(tmp_path, {"claudeAiOauth": {"accessToken": "tok"}})
+    result = fetch_usage(path=path, opener=_opener_returning(b"[1,2,3]"))
+    assert isinstance(result, UsageError)
+    assert result.kind == "bad_response"
+
+
+def test_read_token_directory_path_raises_nocreds(tmp_path):
+    with pytest.raises(NoCredentialsError):
+        read_token(str(tmp_path))
+
+
+def test_fetch_usage_unreadable_credentials(tmp_path):
+    result = fetch_usage(path=str(tmp_path), opener=_opener_returning(b"{}"))
+    assert isinstance(result, UsageError)
+    assert result.kind == "no_credentials"

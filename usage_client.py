@@ -19,7 +19,7 @@ def read_token(path: str = CREDENTIALS_PATH) -> str:
     try:
         with open(path, encoding="utf-8") as f:
             data = json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError) as e:
+    except (OSError, ValueError) as e:
         raise NoCredentialsError(str(e))
     try:
         return data["claudeAiOauth"]["accessToken"]
@@ -91,5 +91,7 @@ def fetch_usage(path: str = CREDENTIALS_PATH, url: str = USAGE_URL,
     try:
         payload = json.loads(body)
     except (json.JSONDecodeError, ValueError):
+        return UsageError("bad_response", "Beklenmedik yanıt")
+    if not isinstance(payload, dict):
         return UsageError("bad_response", "Beklenmedik yanıt")
     return parse_usage(payload, datetime.now(timezone.utc))
