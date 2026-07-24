@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 import customtkinter as ctk
 
-from formatting import color_for, format_countdown
+from formatting import color_for, format_countdown, format_reset_time
 from usage_client import UsageData, UsageError
 
 ctk.set_appearance_mode("dark")
@@ -19,6 +19,11 @@ class _Row:
         self.bar.set(0)
         self.info = ctk.CTkLabel(parent, text="—", anchor="w", font=("Segoe UI", 11))
         self.window = None  # type: ignore
+        # Saat metni sadece anahtar değişince hesaplanır; anahtar bir
+        # döngü boyunca sabit kalır (5 saatte / haftada bir).
+        self._reset_key = None
+        self._reset_text = ""
+        self._last_info = None
 
     def grid(self, r: int):
         self.title.grid(row=r, column=0, sticky="w", padx=10, pady=(6, 0))
@@ -30,6 +35,12 @@ class _Row:
         if window is None:
             self.bar.set(0)
             self.info.configure(text="—")
+            # Önbellek temizlenmezse aynı resets_at ile gelen sonraki
+            # geçerli veri aynı metni üretir, yazma koruması devreye
+            # girer ve satır "—" takılı kalır.
+            self._reset_key = None
+            self._reset_text = ""
+            self._last_info = None
             return
         self.bar.set(window.utilization / 100)
         self.bar.configure(progress_color=color_for(window.utilization))
@@ -39,8 +50,25 @@ class _Row:
         if self.window is None:
             return
         now = datetime.now(timezone.utc)
-        cd = format_countdown(self.window.resets_at, now)
-        self.info.configure(text=f"%{self.window.utilization:.0f}   ⟳ {cd}")
+        resets_at = self.window.resets_at
+        expired = int((resets_at - now).total_seconds()) <= 0
+
+        # Yerel gün anahtarda: gün adının varlığı gece yarısı bayatlar.
+        # Süresi dolmuşluk anahtarda: dolduğunda saat metni boşalmalı
+        # ama resets_at ve yerel gün değişmez.
+        key = (resets_at, now.astimezone().date(), expired)
+        if key != self._reset_key:
+            self._reset_key = key
+            self._reset_text = format_reset_time(resets_at, now)
+
+        text = f"%{self.window.utilization:.0f}   ⟳ {format_countdown(resets_at, now)}"
+        if self._reset_text:
+            text += f" · {self._reset_text}"
+
+        # Geri sayım dakika hassasiyetinde; saniyede bir yazmanın anlamı yok.
+        if text != self._last_info:
+            self._last_info = text
+            self.info.configure(text=text)
 
 
 class UsageApp(ctk.CTk):
