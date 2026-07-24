@@ -136,3 +136,42 @@ def test_row_reset_time_disappears_when_expired(root):
     text_after = row.info.cget("text")
     assert "yenilendi" in text_after
     assert " · " not in text_after
+
+
+def test_row_format_reset_time_called_once_per_cycle(root):
+    # Önbelleğin asıl amacı: anahtar (resets_at, yerel_gün, süresi_doldu)
+    # değişmediği sürece format_reset_time saniyede bir değil, döngü
+    # başına yalnızca bir kez çağrılmalı. Bu test önbellek isabetini
+    # (cache hit) sabitler; yalnızca geçersiz kılmayı değil.
+    local_tz = datetime.now().astimezone().tzinfo
+    anchor = datetime.now(local_tz).replace(hour=9, minute=0, second=0, microsecond=0)
+    resets_at = anchor + timedelta(hours=3)
+    window = Window(utilization=42.0, resets_at=resets_at)
+
+    row = app_module._Row(root, "5 saatlik")
+    row.window = window  # set() yerine: gerçek 'now' önbelleğe karışmasın
+
+    calls = []
+    original = app_module.format_reset_time
+
+    def counting_wrapper(*args, **kwargs):
+        calls.append((args, kwargs))
+        return original(*args, **kwargs)
+
+    app_module.format_reset_time = counting_wrapper
+    try:
+        # Anahtarı değiştirmeyecek şekilde saniye/dakika ilerleyen dört
+        # farklı 'now' değeri: resets_at ve yerel gün aynı, süre dolmadı.
+        now_values = [
+            anchor,
+            anchor + timedelta(seconds=30),
+            anchor + timedelta(minutes=5),
+            anchor + timedelta(hours=1),
+            anchor + timedelta(hours=2, minutes=50),
+        ]
+        for now in now_values:
+            row.refresh_countdown(now=now)
+    finally:
+        app_module.format_reset_time = original
+
+    assert len(calls) == 1
