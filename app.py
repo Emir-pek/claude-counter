@@ -46,10 +46,10 @@ class _Row:
         self.bar.configure(progress_color=color_for(window.utilization))
         self.refresh_countdown()
 
-    def refresh_countdown(self):
+    def refresh_countdown(self, now=None):
         if self.window is None:
             return
-        now = datetime.now(timezone.utc)
+        now = now or datetime.now(timezone.utc)
         resets_at = self.window.resets_at
         expired = int((resets_at - now).total_seconds()) <= 0
 

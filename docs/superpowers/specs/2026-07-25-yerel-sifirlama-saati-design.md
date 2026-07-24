@@ -187,7 +187,15 @@ değişmediği için taşma beklenmiyor, yine de bakılacak).
 
 - `tick()` aralığını değiştirmek (1 sn kalır).
 - Saat biçimi tercihi (12/24 saat) — sistem her zaman 24 saat.
-- Saat dilimi değişikliğini/DST geçişini çalışma anında algılamak. Anahtardaki
-  `yerel_bugün` gün sınırını yakalar; saat dilimi ayarı uygulama açıkken
-  değişirse metin bir sonraki döngüye kadar bayat kalabilir. Kişisel bir araç
-  için kabul edilmiştir.
+- Uygulama açıkken saat diliminin elle değiştirilmesini algılamak. DST
+  geçişleri bu kapsamın dışında değil, zaten sorun çıkarmıyor: `astimezone()`
+  hedef anın UTC ofsetini çözer, dolayısıyla sabit bir `resets_at` her
+  hesaplandığında aynı yerel değere döner. DST'nin oynatabileceği tek alan
+  `local_now.date()`'dir ve o zaten anahtardadır. Asıl kapsam dışı bırakılan
+  durum, kullanıcının işletim sistemi saat dilimi ayarını uygulama açıkken
+  elle değiştirmesidir: bu durumda bir sonraki 60 sn'lik fetch aynı
+  `resets_at`'ı döndürür, `yerel_bugün` ve `süresi_doldu` de değişmeyebilir,
+  anahtar eşit çıkar ve metin bir sonraki fetch'e kadar değil, döngünün
+  kendisi bitene kadar bayat kalabilir — 5 saatlik satır için en fazla 5
+  saat, haftalık satır için en fazla 7 gün. Kişisel bir araç için kabul
+  edilmiştir.

@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 import app as app_module
+from formatting import format_reset_time
 from usage_client import Window
 
 
@@ -75,3 +76,63 @@ def test_row_expired_has_no_reset_time(root):
     text = row.info.cget("text")
     assert "yenilendi" in text
     assert " · " not in text
+
+
+def test_row_day_name_disappears_after_local_midnight(root):
+    # Anahtardaki yerel_bugün alanı olmadan bu test kırmızı verir:
+    # resets_at değişmeden gece yarısını geçince gün adı düşmeli.
+    local_tz = datetime.now().astimezone().tzinfo
+    # Bir sonraki yerel gece yarısı: her iki 'now' değeri de bunun
+    # çevresinde, resets_at'tan önce kalacak şekilde seçiliyor.
+    boundary = datetime.now(local_tz).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    ) + timedelta(days=1)
+    resets_at = boundary + timedelta(hours=1)  # yarın yerel 01:00
+    window = Window(utilization=42.0, resets_at=resets_at)
+
+    row = app_module._Row(root, "5 saatlik")
+    row.window = window  # set() yerine: gerçek 'now' önbelleğe karışmasın
+
+    now_before_midnight = boundary - timedelta(minutes=10)  # bugün 23:50
+    now_after_midnight = boundary + timedelta(minutes=30)  # yarın 00:30
+
+    expected_before = format_reset_time(resets_at, now_before_midnight)
+    expected_after = format_reset_time(resets_at, now_after_midnight)
+    # Sağlık kontrolü: senaryo gerçekten gün adının kaybolmasını sınıyor.
+    assert " " in expected_before  # "Cmt 01:00" gibi: gün adı + saat
+    assert " " not in expected_after  # yalnızca "01:00"
+
+    row.refresh_countdown(now=now_before_midnight)
+    assert row.info.cget("text").endswith(f" · {expected_before}")
+
+    row.refresh_countdown(now=now_after_midnight)
+    assert row.info.cget("text").endswith(f" · {expected_after}")
+
+
+def test_row_reset_time_disappears_when_expired(root):
+    # Anahtardaki süresi_doldu alanı olmadan bu test kırmızı verir:
+    # resets_at ve yerel_bugün değişmeden süre dolunca saat metni
+    # düşmeli, aksi halde "⟳ yenilendi · 12:00" gibi çelişkili bir
+    # satır oluşur.
+    local_tz = datetime.now().astimezone().tzinfo
+    anchor = datetime.now(local_tz).replace(
+        hour=12, minute=0, second=0, microsecond=0
+    )
+    resets_at = anchor
+    window = Window(utilization=42.0, resets_at=resets_at)
+
+    row = app_module._Row(root, "5 saatlik")
+    row.window = window  # set() yerine: gerçek 'now' önbelleğe karışmasın
+
+    now_before = anchor - timedelta(minutes=5)
+    now_after = anchor + timedelta(minutes=5)
+    assert now_before.date() == now_after.date()  # yerel gün aynı kalmalı
+
+    row.refresh_countdown(now=now_before)
+    text_before = row.info.cget("text")
+    assert " · " in text_before
+
+    row.refresh_countdown(now=now_after)
+    text_after = row.info.cget("text")
+    assert "yenilendi" in text_after
+    assert " · " not in text_after
