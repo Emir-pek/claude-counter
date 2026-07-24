@@ -1,5 +1,14 @@
+import re
 from datetime import datetime, timedelta, timezone
-from formatting import format_countdown, color_for, GREEN, YELLOW, RED
+from formatting import (
+    format_countdown,
+    format_reset_time,
+    color_for,
+    DAY_NAMES,
+    GREEN,
+    YELLOW,
+    RED,
+)
 
 NOW = datetime(2026, 7, 23, 21, 0, tzinfo=timezone.utc)
 
@@ -36,3 +45,52 @@ def test_color_thresholds():
     assert color_for(85.0) == YELLOW
     assert color_for(85.1) == RED
     assert color_for(90.0) == RED
+
+
+# Türkiye saati (UTC+3). Testlerde sabitlenir ki sonuç makinenin
+# saat dilimine bağlı olmasın.
+TR = timezone(timedelta(hours=3))
+
+
+def test_reset_time_same_local_day():
+    # yerel 09:00 -> yerel 14:00, ikisi de 25 Temmuz
+    now = datetime(2026, 7, 25, 6, 0, tzinfo=timezone.utc)
+    resets = datetime(2026, 7, 25, 11, 0, tzinfo=timezone.utc)
+    assert format_reset_time(resets, now, TR) == "14:00"
+
+
+def test_reset_time_crosses_local_midnight_while_utc_day_is_same():
+    # Asıl tuzak: UTC'de iki tarih de 25 Temmuz, ama yerelde
+    # 25 Temmuz 22:00 -> 26 Temmuz 01:00. Gün adı çıkmalı.
+    now = datetime(2026, 7, 25, 19, 0, tzinfo=timezone.utc)
+    resets = datetime(2026, 7, 25, 22, 0, tzinfo=timezone.utc)
+    assert now.date() == resets.date()  # UTC tarihleri aynı
+    assert format_reset_time(resets, now, TR) == "Paz 01:00"
+
+
+def test_reset_time_days_away():
+    # haftalık dilim: yerel 25 Temmuz 09:00 -> 31 Temmuz 12:58
+    now = datetime(2026, 7, 25, 6, 0, tzinfo=timezone.utc)
+    resets = datetime(2026, 7, 31, 9, 58, tzinfo=timezone.utc)
+    assert format_reset_time(resets, now, TR) == "Cum 12:58"
+
+
+def test_reset_time_expired_returns_empty():
+    now = datetime(2026, 7, 25, 6, 0, tzinfo=timezone.utc)
+    assert format_reset_time(now - timedelta(seconds=5), now, TR) == ""
+
+
+def test_reset_time_exactly_now_returns_empty():
+    now = datetime(2026, 7, 25, 6, 0, tzinfo=timezone.utc)
+    assert format_reset_time(now, now, TR) == ""
+
+
+def test_reset_time_uses_system_local_when_tz_omitted():
+    # tz verilmezse çökmemeli ve SS:DD biçiminde bir şey dönmeli.
+    now = datetime(2026, 7, 25, 6, 0, tzinfo=timezone.utc)
+    out = format_reset_time(now + timedelta(hours=2), now)
+    assert re.fullmatch(r"(\w{3} )?\d{2}:\d{2}", out)
+
+
+def test_day_names_are_turkish_and_locale_independent():
+    assert DAY_NAMES == ("Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz")
