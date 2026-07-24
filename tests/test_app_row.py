@@ -28,10 +28,13 @@ def _win(hours_ahead: float, util: float = 42.0) -> Window:
 
 
 def test_row_shows_percent_countdown_and_reset_time(root):
+    # Yüzde ayrı label'da: bold ve barın renginde gösterilebilmesi için
+    # geri sayımdan ayrıldı (Tk tek label'da karışık biçim yapamaz).
     row = app_module._Row(root, "5 saatlik")
     row.set(_win(2))
+    assert row.pct.cget("text") == "%42"
     text = row.info.cget("text")
-    assert text.startswith("%42   ⟳ ")
+    assert text.startswith("⟳ ")
     assert " · " in text
 
 

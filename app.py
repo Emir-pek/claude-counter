@@ -4,20 +4,84 @@ from datetime import datetime, timezone
 
 import customtkinter as ctk
 
-from formatting import color_for, format_countdown, format_reset_time
+from formatting import GREEN, RED, YELLOW, color_for, format_countdown, format_reset_time
 from usage_client import UsageData, UsageError
 
 ctk.set_appearance_mode("dark")
 
+# Tüm renkler burada. Başka hiçbir yere hex gömülmez.
+COLORS = {
+    "window": "#1F1E1D",
+    "surface": "#262624",
+    "border": "#3D3D3A",
+    "text_primary": "#FAF9F5",
+    "text_secondary": "#B0AEA5",
+    "accent": "#D97757",
+    "accent_hover": "#C25F42",
+    "bar_safe": "#788C5D",
+    "bar_mid": "#D4A27F",
+    "bar_critical": "#BF4D3B",
+    "bar_track": "#3D3D3A",
+}
+
+# Eşik mantığının tek sahibi formatting.color_for. Burada yalnızca
+# döndürdüğü seviye ekranda kullanılan renge çevriliyor; böylece
+# eşikler tek yerde kalır ve formatting.py'ye dokunulmaz.
+_BAR_COLOR = {
+    GREEN: COLORS["bar_safe"],
+    YELLOW: COLORS["bar_mid"],
+    RED: COLORS["bar_critical"],
+}
+
+PAD_WINDOW = 12  # pencere iç kenar boşluğu
+PAD_CARD = 10  # kartlar arası boşluk
+
 
 class _Row:
-    """Tek bir limit satırı: etiket + çubuk + yüzde + geri sayım."""
+    """Tek bir limit kartı: başlık + çubuk + yüzde + geri sayım."""
 
     def __init__(self, parent, title: str):
-        self.title = ctk.CTkLabel(parent, text=title, anchor="w", font=("Segoe UI", 12, "bold"))
-        self.bar = ctk.CTkProgressBar(parent, height=12)
+        self.card = ctk.CTkFrame(
+            parent,
+            corner_radius=8,
+            fg_color=COLORS["surface"],
+            border_width=1,
+            border_color=COLORS["border"],
+        )
+        self.card.grid_columnconfigure(1, weight=1)
+
+        self.title = ctk.CTkLabel(
+            self.card,
+            text=title,
+            anchor="w",
+            font=("Segoe UI", 12, "bold"),
+            text_color=COLORS["text_primary"],
+        )
+        self.bar = ctk.CTkProgressBar(
+            self.card,
+            height=8,
+            corner_radius=4,
+            fg_color=COLORS["bar_track"],
+            progress_color=COLORS["bar_safe"],
+        )
         self.bar.set(0)
-        self.info = ctk.CTkLabel(parent, text="—", anchor="w", font=("Segoe UI", 11))
+        # Yüzde ayrı bir label: Tk tek label içinde karışık biçimlendirme
+        # yapamaz, yüzde bold ve barın renginde olmalı.
+        self.pct = ctk.CTkLabel(
+            self.card,
+            text="",
+            anchor="w",
+            font=("Segoe UI", 11, "bold"),
+            text_color=COLORS["text_secondary"],
+        )
+        self.info = ctk.CTkLabel(
+            self.card,
+            text="—",
+            anchor="w",
+            font=("Segoe UI", 11),
+            text_color=COLORS["text_secondary"],
+        )
+
         self.window = None  # type: ignore
         # Saat metni sadece anahtar değişince hesaplanır; anahtar bir
         # döngü boyunca sabit kalır (5 saatte / haftada bir).
@@ -26,14 +90,17 @@ class _Row:
         self._last_info = None
 
     def grid(self, r: int):
-        self.title.grid(row=r, column=0, sticky="w", padx=10, pady=(6, 0))
-        self.bar.grid(row=r + 1, column=0, sticky="ew", padx=10)
-        self.info.grid(row=r + 2, column=0, sticky="w", padx=10, pady=(0, 4))
+        self.card.grid(row=r, column=0, sticky="ew", padx=PAD_WINDOW, pady=(0, PAD_CARD))
+        self.title.grid(row=0, column=0, columnspan=2, sticky="w", padx=12, pady=(10, 6))
+        self.bar.grid(row=1, column=0, columnspan=2, sticky="ew", padx=12)
+        self.pct.grid(row=2, column=0, sticky="w", padx=(12, 6), pady=(6, 10))
+        self.info.grid(row=2, column=1, sticky="w", padx=(0, 12), pady=(6, 10))
 
     def set(self, window):
         self.window = window
         if window is None:
             self.bar.set(0)
+            self.pct.configure(text="", text_color=COLORS["text_secondary"])
             self.info.configure(text="—")
             # Önbellek temizlenmezse aynı resets_at ile gelen sonraki
             # geçerli veri aynı metni üretir, yazma koruması devreye
@@ -42,8 +109,11 @@ class _Row:
             self._reset_text = ""
             self._last_info = None
             return
+        bar_color = _BAR_COLOR[color_for(window.utilization)]
         self.bar.set(window.utilization / 100)
-        self.bar.configure(progress_color=color_for(window.utilization))
+        self.bar.configure(progress_color=bar_color)
+        # Yüzde yalnızca yeni veriyle değişir, geri sayımla değil.
+        self.pct.configure(text=f"%{window.utilization:.0f}", text_color=bar_color)
         self.refresh_countdown()
 
     def refresh_countdown(self, now=None):
@@ -61,7 +131,7 @@ class _Row:
             self._reset_key = key
             self._reset_text = format_reset_time(resets_at, now)
 
-        text = f"%{self.window.utilization:.0f}   ⟳ {format_countdown(resets_at, now)}"
+        text = f"⟳ {format_countdown(resets_at, now)}"
         if self._reset_text:
             text += f" · {self._reset_text}"
 
@@ -75,26 +145,47 @@ class UsageApp(ctk.CTk):
     def __init__(self):
         super().__init__()
         self.title("Claude Kullanımı")
-        self.geometry("260x235")
+        self.geometry("260x310")
         self.resizable(False, False)
         self.attributes("-topmost", True)
+        self.configure(fg_color=COLORS["window"])
         self.grid_columnconfigure(0, weight=1)
         self.on_refresh = None
         self._data = None
 
         header = ctk.CTkFrame(self, fg_color="transparent")
-        header.grid(row=0, column=0, sticky="ew", padx=6, pady=(6, 0))
+        header.grid(row=0, column=0, sticky="ew", padx=PAD_WINDOW, pady=(PAD_WINDOW, PAD_CARD))
         header.grid_columnconfigure(0, weight=1)
-        ctk.CTkLabel(header, text="Claude Kullanımı", font=("Segoe UI", 12, "bold")).grid(row=0, column=0, sticky="w")
-        ctk.CTkButton(header, text="↻", width=28, command=self._refresh_clicked).grid(row=0, column=1)
+        ctk.CTkLabel(
+            header,
+            text="Claude Kullanımı",
+            font=("Segoe UI", 12, "bold"),
+            text_color=COLORS["text_primary"],
+        ).grid(row=0, column=0, sticky="w")
+        ctk.CTkButton(
+            header,
+            text="↻",
+            width=28,
+            corner_radius=6,
+            fg_color=COLORS["accent"],
+            hover_color=COLORS["accent_hover"],
+            text_color=COLORS["text_primary"],
+            command=self._refresh_clicked,
+        ).grid(row=0, column=1)
 
         self.five = _Row(self, "5 saatlik")
         self.five.grid(1)
         self.seven = _Row(self, "Haftalık")
-        self.seven.grid(4)
+        self.seven.grid(2)
 
-        self.status = ctk.CTkLabel(self, text="yükleniyor…", anchor="w", font=("Segoe UI", 10), text_color="gray")
-        self.status.grid(row=7, column=0, sticky="w", padx=10, pady=(2, 6))
+        self.status = ctk.CTkLabel(
+            self,
+            text="yükleniyor…",
+            anchor="e",
+            font=("Segoe UI", 10),
+            text_color=COLORS["text_secondary"],
+        )
+        self.status.grid(row=3, column=0, sticky="ew", padx=PAD_WINDOW, pady=(0, PAD_WINDOW))
 
     def _refresh_clicked(self):
         if self.on_refresh:
@@ -104,10 +195,13 @@ class UsageApp(ctk.CTk):
         self._data = data
         self.five.set(data.five_hour)
         self.seven.set(data.seven_day)
-        self.status.configure(text=f"güncellendi: {data.fetched_at.astimezone().strftime('%H:%M')}", text_color="gray")
+        self.status.configure(
+            text=f"güncellendi: {data.fetched_at.astimezone().strftime('%H:%M')}",
+            text_color=COLORS["text_secondary"],
+        )
 
     def render_error(self, err: UsageError):
-        self.status.configure(text=err.message, text_color="#e74c3c")
+        self.status.configure(text=err.message, text_color=COLORS["bar_critical"])
 
     def tick(self):
         self.five.refresh_countdown()
