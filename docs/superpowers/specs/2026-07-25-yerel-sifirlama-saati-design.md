@@ -111,11 +111,12 @@ mantığını veri katmanına sızdırır.
 `_Row` iki yeni alan tutar:
 
 ```
-_reset_key   = (resets_at, yerel_bugün)   →   _reset_text
+_reset_key   = (resets_at, yerel_bugün, süresi_doldu)   →   _reset_text
 _last_info   = etikete en son yazılan metin
 ```
 
-`yerel_bugün` = `now.astimezone(tz).date()`.
+`yerel_bugün` = `now.astimezone(tz).date()`,
+`süresi_doldu` = `int((resets_at - now).total_seconds()) <= 0`.
 
 Satır metni şöyle kurulur — saat metni boşsa ayraç da yazılmaz:
 
@@ -136,8 +137,14 @@ yarısı bayatlar. 23:50'de doğru biçimde `Cum 12:58` yazılır, ama gece
 yarısından sonra aynı sıfırlanma artık "bugün"dür ve çıplak `12:58` olmalıdır.
 `resets_at` değişmediği için anahtar tek başına bunu yakalayamaz.
 
-Bu, döngü başına bir hesaplamaya en fazla gece yarısında bir tane ekler —
-istenen "döngü başına bir kez" hedefiyle uyumludur.
+Anahtardaki üçüncü alanın (`süresi_doldu`) sebebi benzer: süre dolduğunda
+`format_reset_time` boş string döndürmelidir (§2), ama o anda ne `resets_at`
+ne de yerel gün değişir. Bu alan olmasaydı önbellekteki eski saat yerinde
+kalır ve satır `⟳ yenilendi · 12:58` olurdu.
+
+Bu iki alan, döngü başına bir hesaplamaya en fazla gece yarısında bir ve süre
+dolduğunda bir tane daha ekler — istenen "döngü başına bir kez" hedefiyle
+uyumludur.
 
 ### 4.2 Etikete yazma: yalnızca metin değiştiyse
 
