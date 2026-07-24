@@ -140,7 +140,12 @@ hakları saklıdır" sayılır ve yayın amacıyla çelişirdi.
 
 ## Nihai dosya listesi
 
-Yeni: `baslat.bat`, `README.md`, `README.tr.md`, `LICENSE`, `docs/screenshot.png`.
+Yeni: `baslat.bat`, `.gitattributes`, `README.md`, `README.tr.md`, `LICENSE`,
+`docs/screenshot.png`.
+
+`.gitattributes` (`* text=auto`, `*.bat text eol=crlf`) `.bat`'in klonlarda CRLF satır
+sonlarıyla çıkmasını garanti eder; LF ile çıkan bir batch dosyasında `goto` etiketleri
+bozulabilir.
 Değişen: `requirements.txt` (sürüm sabitleme), `.gitignore` (yeni girdiler).
 Takipten çıkan: `docs/superpowers/**`.
 Dokunulmayan: `app.py`, `main.py`, `usage_client.py`, `formatting.py`, `tests/**`,
