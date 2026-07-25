@@ -16,6 +16,9 @@ biri için renkli bir çubuk, canlı geri sayım ve sıfırlanmanın yerel saati
 - Kurulu ve giriş yapılmış [Claude Code](https://claude.com/claude-code) —
   widget onun oturumunu okur
 
+> Claude'u yalnızca web'de veya masaüstü uygulamasında kullanıyorsanız bu
+> widget kullanımınızı göremez — Claude Code'un oturum dosyasını okur.
+
 ## Kurulum ve çalıştırma
 
 1. Kodu indirin: **Code → Download ZIP**, sonra arşivi çıkarın (ya da

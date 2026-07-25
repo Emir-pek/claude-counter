@@ -20,6 +20,9 @@ resets.
 - [Claude Code](https://claude.com/claude-code) installed and logged in — the
   widget reads its session
 
+> If you only use Claude on the web or in the desktop app, this widget cannot
+> see your usage — it reads Claude Code's session file.
+
 ## Install and run
 
 1. Download the code: **Code → Download ZIP**, then extract it (or
