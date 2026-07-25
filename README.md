@@ -31,8 +31,9 @@ resets.
 3. The first run creates a local `.venv` and installs customtkinter. It takes a
    few seconds and happens only once — later runs open instantly.
 
-The widget refreshes every 60 seconds; the **↻** button refreshes it manually.
-Close it with the **✕** button.
+The widget refreshes every 5 minutes; the **↻** button refreshes it manually.
+The countdowns tick every second on their own, so only the percentages wait for
+the next poll. Close it with the **✕** button.
 
 To start it automatically with Windows, press `Win+R`, run `shell:startup`, and
 put a shortcut to `baslat.bat` in the folder that opens.
@@ -55,9 +56,12 @@ it does before you run it:
 - **It is not the paid API.** The request runs no model and consumes no tokens,
   so it costs nothing and does not appear on any bill. It does not consume your
   5-hour or weekly limit either — it only reports it.
-- It polls once every 60 seconds. If you restart it many times in a row, the
-  endpoint may answer with HTTP 429; the rows then keep showing the last good
-  data.
+- It polls once every 5 minutes — 12 requests an hour. If the endpoint still
+  answers with HTTP 429 (too many requests), the widget backs off exponentially
+  up to 30 minutes, honours a `Retry-After` header when the server sends one,
+  and returns to its normal interval on the next success. The rows keep showing
+  the last good data meanwhile, and the status line turns amber rather than red
+  because the condition clears itself.
 
 ## Development
 
@@ -70,9 +74,10 @@ python -m pytest
 
 Run from source without the launcher: `pythonw main.py`
 
-Layout: `main.py` is the refresh loop, `app.py` the CustomTkinter window,
-`usage_client.py` the fetch and parse layer, `formatting.py` the countdown and
-color rules.
+Layout: `main.py` wires everything together, `scheduling.py` decides when the
+next poll happens (interval, backoff, one-request-at-a-time), `app.py` is the
+CustomTkinter window, `usage_client.py` the fetch and parse layer,
+`formatting.py` the countdown and color rules.
 
 ## Troubleshooting
 

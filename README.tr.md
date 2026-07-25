@@ -27,8 +27,9 @@ biri için renkli bir çubuk, canlı geri sayım ve sıfırlanmanın yerel saati
 3. İlk çalıştırma yerel bir `.venv` kurup customtkinter'ı indirir. Birkaç
    saniye sürer ve yalnızca bir kez olur — sonraki açılışlar anında.
 
-Widget 60 saniyede bir kendini yeniler; **↻** düğmesi elle yeniler. Kapatmak
-için **✕** düğmesini kullanın.
+Widget 5 dakikada bir kendini yeniler; **↻** düğmesi elle yeniler. Geri sayımlar
+saniyede bir kendi kendine işler, yalnızca yüzdeler bir sonraki sorguyu bekler.
+Kapatmak için **✕** düğmesini kullanın.
 
 Windows açılışında kendiliğinden başlaması için `Win+R` → `shell:startup`
 yazın ve açılan klasöre `baslat.bat` kısayolunu koyun.
@@ -50,9 +51,12 @@ tam olarak bilmelisiniz:
 - **Ücretli API değildir.** İstek model çalıştırmaz, token tüketmez; hiçbir
   ücrete tabi değildir ve faturaya yansımaz. 5 saatlik veya haftalık limitinizi
   de tüketmez, yalnızca raporlar.
-- 60 saniyede bir sorgular. Arka arkaya çok kez yeniden başlatılırsa endpoint
-  HTTP 429 dönebilir; bu durumda satırlar son geçerli veriyi göstermeye devam
-  eder.
+- 5 dakikada bir sorgular — saatte 12 istek. Endpoint yine de HTTP 429 (çok
+  fazla istek) dönerse widget üstel olarak geri çekilir (30 dakikaya kadar),
+  sunucu `Retry-After` başlığı gönderdiyse ona uyar ve ilk başarılı sorguda
+  normal aralığına döner. Bu sırada satırlar son geçerli veriyi göstermeye
+  devam eder; durum yazısı kırmızı değil amber olur, çünkü bu durum kendi
+  kendine geçer.
 
 ## Geliştirme
 
@@ -65,9 +69,10 @@ python -m pytest
 
 Başlatıcı olmadan kaynaktan çalıştırma: `pythonw main.py`
 
-Dosya düzeni: `main.py` yenileme döngüsü, `app.py` CustomTkinter penceresi,
-`usage_client.py` veri çekme ve ayrıştırma, `formatting.py` geri sayım ve renk
-kuralları.
+Dosya düzeni: `main.py` parçaları birbirine bağlar, `scheduling.py` bir sonraki
+sorgunun ne zaman yapılacağına karar verir (aralık, geri çekilme, aynı anda tek
+istek), `app.py` CustomTkinter penceresi, `usage_client.py` veri çekme ve
+ayrıştırma, `formatting.py` geri sayım ve renk kuralları.
 
 ## Sorun giderme
 

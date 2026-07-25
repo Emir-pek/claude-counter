@@ -201,7 +201,10 @@ class UsageApp(ctk.CTk):
         )
 
     def render_error(self, err: UsageError):
-        self.status.configure(text=err.message, text_color=COLORS["bar_critical"])
+        # İstek sınırı geçici ve kendi kendine toparlıyor; kırmızı yerine
+        # amber, kullanıcı bunu bozulma sanmasın.
+        color = "bar_mid" if err.kind == "rate_limited" else "bar_critical"
+        self.status.configure(text=err.message, text_color=COLORS[color])
 
     def tick(self):
         self.five.refresh_countdown()

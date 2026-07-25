@@ -4,7 +4,8 @@ import pytest
 import urllib.error
 from contextlib import contextmanager
 from datetime import datetime, timezone
-from usage_client import read_token, NoCredentialsError, parse_usage, UsageData, Window, fetch_usage, UsageError
+from usage_client import (read_token, NoCredentialsError, parse_usage, UsageData, Window,
+                          fetch_usage, UsageError, parse_retry_after)
 
 
 def _write_creds(tmp_path, obj):
@@ -94,6 +95,63 @@ def test_fetch_usage_unauthorized(tmp_path):
     result = fetch_usage(path=path, opener=_opener_raising(exc))
     assert isinstance(result, UsageError)
     assert result.kind == "unauthorized"
+
+
+def _http_error(code, headers=None):
+    return urllib.error.HTTPError("u", code, "err", headers or {}, None)
+
+
+def test_fetch_usage_rate_limited_has_own_kind(tmp_path):
+    # 429 "network" olarak etiketlenirse zamanlayıcı onu geri çekilmesi
+    # gereken bir durum olarak ayırt edemez.
+    path = _write_creds(tmp_path, {"claudeAiOauth": {"accessToken": "tok"}})
+    result = fetch_usage(path=path, opener=_opener_raising(_http_error(429)))
+    assert isinstance(result, UsageError)
+    assert result.kind == "rate_limited"
+    assert result.retry_after is None
+
+
+def test_fetch_usage_rate_limited_parses_retry_after_seconds(tmp_path):
+    path = _write_creds(tmp_path, {"claudeAiOauth": {"accessToken": "tok"}})
+    exc = _http_error(429, {"Retry-After": "42"})
+    result = fetch_usage(path=path, opener=_opener_raising(exc))
+    assert result.retry_after == 42.0
+
+
+def test_fetch_usage_rate_limited_retry_after_is_case_insensitive(tmp_path):
+    path = _write_creds(tmp_path, {"claudeAiOauth": {"accessToken": "tok"}})
+    exc = _http_error(429, {"retry-after": "7"})
+    result = fetch_usage(path=path, opener=_opener_raising(exc))
+    assert result.retry_after == 7.0
+
+
+def test_fetch_usage_rate_limited_parses_retry_after_http_date(tmp_path):
+    path = _write_creds(tmp_path, {"claudeAiOauth": {"accessToken": "tok"}})
+    exc = _http_error(429, {"Retry-After": "Sat, 25 Jul 2026 12:00:30 GMT"})
+    result = fetch_usage(path=path, opener=_opener_raising(exc))
+    now = datetime(2026, 7, 25, 12, 0, 0, tzinfo=timezone.utc)
+    assert parse_retry_after("Sat, 25 Jul 2026 12:00:30 GMT", now) == 30.0
+    assert result.retry_after is not None
+
+
+def test_fetch_usage_rate_limited_garbage_retry_after_is_none(tmp_path):
+    path = _write_creds(tmp_path, {"claudeAiOauth": {"accessToken": "tok"}})
+    exc = _http_error(429, {"Retry-After": "yakında"})
+    result = fetch_usage(path=path, opener=_opener_raising(exc))
+    assert result.kind == "rate_limited"
+    assert result.retry_after is None
+
+
+def test_parse_retry_after_past_date_is_zero_not_negative():
+    now = datetime(2026, 7, 25, 12, 0, 0, tzinfo=timezone.utc)
+    assert parse_retry_after("Sat, 25 Jul 2026 11:59:00 GMT", now) == 0.0
+
+
+def test_fetch_usage_other_http_error_stays_network(tmp_path):
+    path = _write_creds(tmp_path, {"claudeAiOauth": {"accessToken": "tok"}})
+    result = fetch_usage(path=path, opener=_opener_raising(_http_error(500)))
+    assert result.kind == "network"
+    assert "500" in result.message
 
 
 def test_fetch_usage_network_error(tmp_path):

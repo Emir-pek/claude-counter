@@ -6,6 +6,7 @@ import urllib.error
 import urllib.request
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 
 CREDENTIALS_PATH = os.path.expanduser("~/.claude/.credentials.json")
 USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
@@ -65,6 +66,55 @@ def parse_usage(payload: dict, fetched_at: datetime) -> UsageData:
 class UsageError:
     kind: str
     message: str
+    # Yalnızca kind == "rate_limited" için dolu olabilir: sunucunun
+    # kaç saniye beklememizi istediği. Yoksa None, zamanlayıcı kendi
+    # geri çekilmesini uygular.
+    retry_after: float | None = None
+
+
+def _header(headers, name: str):
+    """Retry-After'ı büyük/küçük harf farkına takılmadan okur.
+
+    Gerçek yanıtta headers case-insensitive bir HTTPMessage, ama
+    HTTPError düz bir dict ile de kurulabiliyor; o durumda .get()
+    harfe duyarlı olur ve başlığı sessizce kaçırırız.
+    """
+    if headers is None:
+        return None
+    try:
+        items = headers.items()
+    except AttributeError:
+        return None
+    target = name.lower()
+    for key, value in items:
+        if str(key).lower() == target:
+            return value
+    return None
+
+
+def parse_retry_after(value, now: datetime | None = None) -> float | None:
+    """RFC 7231 Retry-After: ya delta-saniye ya da HTTP-date."""
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        return max(0.0, float(int(text)))
+    except ValueError:
+        pass
+    try:
+        when = parsedate_to_datetime(text)
+    except (TypeError, ValueError):
+        return None
+    if when is None:
+        return None
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=timezone.utc)
+    now = now or datetime.now(timezone.utc)
+    # Geçmiş bir tarih negatif vermemeli: negatif gecikme "hemen tekrar
+    # dene" demek olurdu ve bizi doğrudan limite geri sokar.
+    return max(0.0, (when - now).total_seconds())
 
 
 def fetch_usage(path: str = CREDENTIALS_PATH, url: str = USAGE_URL,
@@ -84,6 +134,10 @@ def fetch_usage(path: str = CREDENTIALS_PATH, url: str = USAGE_URL,
     except urllib.error.HTTPError as e:
         if e.code == 401:
             return UsageError("unauthorized", "Oturum süresi dolmuş — Claude Code'da giriş yapın")
+        if e.code == 429:
+            # Ayrı bir kind: zamanlayıcının geri çekilmesi gereken tek durum.
+            return UsageError("rate_limited", "İstek sınırı — bekleniyor",
+                              retry_after=parse_retry_after(_header(e.headers, "Retry-After")))
         return UsageError("network", f"Sunucu hatası ({e.code})")
     except (urllib.error.URLError, TimeoutError, OSError):
         return UsageError("network", "Bağlantı yok")
