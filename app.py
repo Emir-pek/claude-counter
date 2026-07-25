@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 
 import customtkinter as ctk
 
+from crab_overlay import NULL_CRAB, mood_from
 from formatting import GREEN, RED, YELLOW, color_for, format_countdown, format_reset_time
 from usage_client import UsageData, UsageError
 from win_theme import apply_titlebar_theme, frame_hwnd
@@ -177,6 +178,11 @@ class _Row:
 
 
 class UsageApp(ctk.CTk):
+    # Yengeç overlay'ini main() kuruyor. O ana kadar — ve overlay hiç
+    # kurulamazsa — null-object devrede kalır, böylece render()'da
+    # "overlay var mı" dallanmasına gerek kalmıyor.
+    crab = NULL_CRAB
+
     def __init__(self):
         super().__init__()
         self.title("Claude Kullanımı")
@@ -238,6 +244,11 @@ class UsageApp(ctk.CTk):
             text=f"güncellendi: {data.fetched_at.astimezone().strftime('%H:%M')}",
             text_color=COLORS["text_secondary"],
         )
+        # Yalnızca veri geldiğinde güncelleniyor; render_error'da bilerek
+        # dokunulmuyor ki veri yokken ruh hali son bilinen değerde kalsın.
+        mood = mood_from(data.five_hour, data.seven_day)
+        if mood is not None:
+            self.crab.set_mood(mood)
 
     def render_error(self, err: UsageError):
         # İstek sınırı geçici ve kendi kendine toparlıyor; kırmızı yerine

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import threading
 
+import crab_overlay
 from app import UsageApp
 from scheduling import Poller
 from usage_client import UsageData, UsageError, fetch_usage
@@ -60,6 +61,9 @@ def main():
     poller = Poller(app, start_fetch)
     apply = build_apply(app, poller)
     app.on_refresh = poller.manual_request
+    # Overlay kendi after() döngülerini kurar ve Poller'a hiç dokunmaz;
+    # kurulamazsa null-object döner ve uygulama yengeçsiz çalışır.
+    app.crab = crab_overlay.install(app)
     poller.start()            # açılışta ilk çekim
     app.after(TICK_MS, tick)  # saniyelik geri sayım
     app.mainloop()

@@ -37,6 +37,10 @@ biri için renkli bir çubuk, canlı geri sayım ve sıfırlanmanın yerel saati
 3. İlk çalıştırma yerel bir `.venv` kurup customtkinter'ı indirir. Birkaç
    saniye sürer ve yalnızca bir kez olur — sonraki açılışlar anında.
 
+Pencerenin kenarında küçük bir pixel-art yengeç dolaşır. Tamamen süstür ve
+tıklamalar içinden geçer; Pillow ya da sprite yoksa görünmez, geri kalan her
+şey çalışmaya devam eder.
+
 Widget 5 dakikada bir kendini yeniler; **↻** düğmesi elle yeniler. Geri sayımlar
 saniyede bir kendi kendine işler, yalnızca yüzdeler bir sonraki sorguyu bekler.
 Kapatmak için **✕** düğmesini kullanın.
@@ -83,7 +87,7 @@ Dosya düzeni: `main.py` parçaları birbirine bağlar, `scheduling.py` bir sonr
 sorgunun ne zaman yapılacağına karar verir (aralık, geri çekilme, aynı anda tek
 istek), `app.py` CustomTkinter penceresi, `usage_client.py` veri çekme ve
 ayrıştırma, `formatting.py` geri sayım ve renk kuralları, `win_theme.py`
-Windows 11 başlık çubuğu rengi.
+Windows 11 başlık çubuğu rengi, `crab_overlay.py` süs yengeci.
 
 Pencere simgesi elle çizilmedi, üretiliyor: `python -m tools.gen_icon`
 komutu `assets/claude_counter.ico` dosyasını yalnızca standart kütüphaneyle

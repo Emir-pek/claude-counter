@@ -41,6 +41,10 @@ resets.
 3. The first run creates a local `.venv` and installs customtkinter. It takes a
    few seconds and happens only once — later runs open instantly.
 
+A small pixel-art crab walks around the edge of the window. It is purely
+decorative and clicks pass straight through it; if Pillow or the sprite is
+missing it simply does not appear and everything else keeps working.
+
 The widget refreshes every 5 minutes; the **↻** button refreshes it manually.
 The countdowns tick every second on their own, so only the percentages wait for
 the next poll. Close it with the **✕** button.
@@ -88,7 +92,7 @@ Layout: `main.py` wires everything together, `scheduling.py` decides when the
 next poll happens (interval, backoff, one-request-at-a-time), `app.py` is the
 CustomTkinter window, `usage_client.py` the fetch and parse layer,
 `formatting.py` the countdown and color rules, `win_theme.py` the Windows 11
-titlebar tint.
+titlebar tint, `crab_overlay.py` the decorative crab.
 
 The window icon is generated, not hand-drawn: `python -m tools.gen_icon`
 rewrites `assets/claude_counter.ico` using nothing but the standard library.

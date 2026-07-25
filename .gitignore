@@ -10,6 +10,8 @@ docs/superpowers/
 # inmediği için "assets/" deseninden sonra gelen bir !istisna çalışmazdı.
 assets/*
 !assets/claude_counter.ico
+!assets/crab_walk.png
 tools/*
 !tools/__init__.py
 !tools/gen_icon.py
+!tools/gen_crab.py

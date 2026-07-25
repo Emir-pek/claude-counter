@@ -1,1 +1,5 @@
 customtkinter>=6.0,<7
+# Yengeç overlay'inin sprite sheet'ini dilimlemek ve Tk'ye alfa kanallı
+# kareler vermek için. Kurulu değilse overlay sessizce kapanır ve
+# uygulama normal açılır — ama yengeç de hiç görünmez.
+pillow>=10,<12
