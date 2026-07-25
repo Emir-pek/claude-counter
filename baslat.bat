@@ -29,8 +29,25 @@ exit /b 1
 REM --- The completion marker is pythonw.exe, not the .venv folder: a setup
 REM --- interrupted halfway leaves the folder behind and would otherwise
 REM --- wedge every future launch.
-if exist ".venv\Scripts\pythonw.exe" goto run
+if not exist ".venv\Scripts\pythonw.exe" goto first_run
 
+REM --- The venv exists, but it may predate a version that added a package.
+REM --- Without this check an upgrade would skip pip entirely, the new
+REM --- dependency would never arrive, and the feature that needs it would
+REM --- silently do nothing -- the worst kind of failure to diagnose.
+REM --- fc also fails when the stamp is missing, which is exactly the state
+REM --- every pre-existing installation is in.
+fc /b requirements.txt ".venv\requirements.installed" >nul 2>&1
+if not errorlevel 1 goto run
+echo.
+echo Dependencies changed since the last run. Updating...
+echo.
+".venv\Scripts\python.exe" -m pip install -r requirements.txt
+if errorlevel 1 goto setup_failed
+copy /y requirements.txt ".venv\requirements.installed" >nul
+goto run
+
+:first_run
 echo.
 echo First run: setting up a local Python environment.
 echo This takes a few seconds and happens only once.
@@ -40,6 +57,7 @@ if errorlevel 1 goto setup_failed
 ".venv\Scripts\python.exe" -m pip install -r requirements.txt
 if errorlevel 1 goto setup_failed
 if not exist ".venv\Scripts\pythonw.exe" goto setup_failed
+copy /y requirements.txt ".venv\requirements.installed" >nul
 echo.
 echo Setup complete. Starting Claude Counter...
 

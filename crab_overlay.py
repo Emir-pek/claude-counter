@@ -198,6 +198,10 @@ class CrabOverlay:
         frames = slice_sheet(sheet)
 
         self._win = tk.Toplevel(self._app)
+        # Toplevel başlığı ana pencereden miras alıyor; iki pencere aynı adı
+        # taşıyınca dış araçlar (ve Process.MainWindowHandle) yanlış olanı
+        # bulup asıl pencere sanıyor.
+        self._win.title("")
         self._win.overrideredirect(True)
         # Windows dışında TclError atar; yakalanıp overlay kapanır.
         self._win.attributes("-transparentcolor", TRANSPARENT_KEY)
