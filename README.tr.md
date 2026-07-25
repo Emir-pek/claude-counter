@@ -16,8 +16,18 @@ biri için renkli bir çubuk, canlı geri sayım ve sıfırlanmanın yerel saati
 - Kurulu ve giriş yapılmış [Claude Code](https://claude.com/claude-code) —
   widget onun oturumunu okur
 
-> Claude'u yalnızca web'de veya masaüstü uygulamasında kullanıyorsanız bu
-> widget kullanımınızı göremez — Claude Code'un oturum dosyasını okur.
+> **İhtiyaç duyduğu şeyle gösterdiği şey aynı değil.**
+>
+> *Oturumu* Claude Code'un oturum dosyasından alır; bu yüzden Claude Code'un
+> kurulu ve giriş yapılmış olması gerekir. Claude'u yalnızca web'de
+> kullanıyorsanız okuyacağı bir oturum dosyası olmaz ve widget başlayamaz.
+>
+> *Gösterdiği* şey ise hesabınızın tamamıdır. 5 saatlik ve haftalık limitler
+> tek bir uygulamaya değil aboneliğinize aittir; dolayısıyla yaptığınız her
+> şey aynı çubuklara yazılır: terminaldeki Claude Code, VS Code ve JetBrains
+> eklentileri, tarayıcıdaki claude.ai, masaüstü uygulaması ve Cowork.
+> Bunların herhangi birindeki kullanım yüzdeleri hareket ettirir — Claude Code
+> kapalıyken bile.
 
 ## Kurulum ve çalıştırma
 

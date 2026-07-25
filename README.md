@@ -20,8 +20,18 @@ resets.
 - [Claude Code](https://claude.com/claude-code) installed and logged in — the
   widget reads its session
 
-> If you only use Claude on the web or in the desktop app, this widget cannot
-> see your usage — it reads Claude Code's session file.
+> **What it needs is not the same as what it shows.**
+>
+> It *signs in* through Claude Code's session file, so Claude Code has to be
+> installed and logged in. If you only ever use Claude on the web, there is no
+> session file to read and the widget has nothing to start from.
+>
+> What it *reports* is your whole account. The 5-hour and weekly limits belong
+> to your subscription, not to any single app, so everything you do counts
+> toward the same bars: Claude Code in the terminal, the VS Code and JetBrains
+> extensions, claude.ai in the browser, the desktop app, and Cowork. Usage from
+> any of them moves the percentages — including while Claude Code itself is
+> closed.
 
 ## Install and run
 
