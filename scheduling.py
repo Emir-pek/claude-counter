@@ -6,11 +6,14 @@ tek bir fonksiyona indirildi.
 """
 from __future__ import annotations
 
+import time
+
 from usage_client import UsageError
 
 BASE_INTERVAL_MS = 300_000  # 5 dk — saatte 12 istek, limitin çok altında
 MAX_BACKOFF_MS = 1_800_000  # 30 dk tavan
 FIRST_FETCH_MS = 100  # açılışta pencere hemen dolsun
+MANUAL_MIN_GAP_MS = 20_000  # ↻ tıklamaları arasındaki asgari boşluk
 
 
 def _clamp(ms: float) -> int:
@@ -51,12 +54,15 @@ class Poller:
     sağlayan herhangi bir nesne enjekte edilebilir.
     """
 
-    def __init__(self, scheduler, start_fetch, base_ms: int = BASE_INTERVAL_MS):
+    def __init__(self, scheduler, start_fetch, base_ms: int = BASE_INTERVAL_MS,
+                 clock=time.monotonic):
         self._scheduler = scheduler
         self._start_fetch = start_fetch
+        self._clock = clock
         self.delay_ms = base_ms
         self.fetching = False
         self._timer = None
+        self._last_finished = None
 
     def start(self, first_delay_ms: int = FIRST_FETCH_MS) -> None:
         self._schedule(first_delay_ms)
@@ -73,9 +79,22 @@ class Poller:
         self._start_fetch()
         return True
 
+    def manual_request(self) -> bool:
+        """↻ düğmesi. Ard arda tıklamalar arasında asgari boşluk şartı var.
+
+        request()'teki koruma yalnızca eşzamanlı isteği engelliyor; ↻'ye
+        yirmi kez basmak yirmi istek üretiyordu ve limiti ilk tetikleyen
+        de tam olarak buydu.
+        """
+        if self._last_finished is not None:
+            if (self._clock() - self._last_finished) * 1000 < MANUAL_MIN_GAP_MS:
+                return False
+        return self.request()
+
     def finished(self, result) -> None:
         """Sonuç geldiğinde ana thread'den çağrılır; zinciri sürdürür."""
         self.fetching = False
+        self._last_finished = self._clock()
         self._schedule(next_delay_ms(result, self.delay_ms))
 
     def _schedule(self, ms: int) -> None:
