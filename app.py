@@ -246,9 +246,7 @@ class UsageApp(ctk.CTk):
         )
         # Yalnızca veri geldiğinde güncelleniyor; render_error'da bilerek
         # dokunulmuyor ki veri yokken ruh hali son bilinen değerde kalsın.
-        mood = mood_from(data.five_hour, data.seven_day)
-        if mood is not None:
-            self.crab.set_mood(mood)
+        self.crab.set_mood(mood_from(data.five_hour))
 
     def render_error(self, err: UsageError):
         # İstek sınırı geçici ve kendi kendine toparlıyor; kırmızı yerine

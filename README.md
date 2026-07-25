@@ -41,8 +41,11 @@ resets.
 3. The first run creates a local `.venv` and installs customtkinter. It takes a
    few seconds and happens only once — later runs open instantly.
 
-A small pixel-art crab walks around the edge of the window. It is purely
-decorative and clicks pass straight through it; if Pillow or the sprite is
+A small pixel-art crab walks around the edge of the window, and it gets
+visibly angrier as your **5-hour** window fills: it scowls, turns red, and
+walks faster. It switches at the same thresholds the bars use, so the crab is
+never calm while the bar is red. The weekly window deliberately does not
+affect its mood. Clicks pass straight through it; if Pillow or the sprite is
 missing it simply does not appear and everything else keeps working.
 
 The widget refreshes every 5 minutes; the **↻** button refreshes it manually.

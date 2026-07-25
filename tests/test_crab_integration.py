@@ -59,28 +59,25 @@ def test_widget_starts_with_a_safe_default_crab():
     assert UsageApp.crab is NULL_CRAB
 
 
-def test_render_reports_the_busier_window():
+def test_render_reports_the_five_hour_window():
     app = StubApp()
     _render(app, _data(_win(30.0), _win(78.0)))
-    assert app.crab.moods == [78.0]
+    assert app.crab.moods == [30.0]
 
 
-def test_render_reports_the_busier_window_whichever_side_it_is_on():
+def test_weekly_window_does_not_drive_the_mood():
+    # Haftalik dolmus olsa da 5 saatlik bosken yengec sakin kalmali.
     app = StubApp()
-    _render(app, _data(_win(91.0), _win(12.0)))
-    assert app.crab.moods == [91.0]
-
-
-def test_render_uses_the_only_window_present():
-    app = StubApp()
-    _render(app, _data(None, _win(12.0)))
+    _render(app, _data(_win(12.0), _win(99.0)))
     assert app.crab.moods == [12.0]
 
 
-def test_render_skips_the_crab_when_both_windows_are_missing():
+def test_render_passes_none_when_the_five_hour_window_is_missing():
+    # app.py dallanmiyor; None'i set_mood yutuyor ve kademe korunuyor.
+    # Korumanin kendisi test_crab_overlay.py'de dogrulaniyor.
     app = StubApp()
-    _render(app, _data(None, None))
-    assert app.crab.moods == []
+    _render(app, _data(None, _win(12.0)))
+    assert app.crab.moods == [None]
 
 
 def test_render_error_leaves_the_mood_untouched():

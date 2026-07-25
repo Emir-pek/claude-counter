@@ -37,9 +37,12 @@ biri için renkli bir çubuk, canlı geri sayım ve sıfırlanmanın yerel saati
 3. İlk çalıştırma yerel bir `.venv` kurup customtkinter'ı indirir. Birkaç
    saniye sürer ve yalnızca bir kez olur — sonraki açılışlar anında.
 
-Pencerenin kenarında küçük bir pixel-art yengeç dolaşır. Tamamen süstür ve
-tıklamalar içinden geçer; Pillow ya da sprite yoksa görünmez, geri kalan her
-şey çalışmaya devam eder.
+Pencerenin kenarında küçük bir pixel-art yengeç dolaşır ve **5 saatlik**
+pencereniz doldukça gözle görülür biçimde kızar: kaşlarını çatar, kırmızıya
+döner ve hızlanır. Kademe değişimi çubuklarla aynı eşiklerde olur, yani çubuk
+kırmızıyken yengeç sakin kalmaz. Haftalık pencere ruh halini bilerek
+etkilemez. Tıklamalar yengecin içinden geçer; Pillow ya da sprite yoksa
+görünmez, geri kalan her şey çalışmaya devam eder.
 
 Widget 5 dakikada bir kendini yeniler; **↻** düğmesi elle yeniler. Geri sayımlar
 saniyede bir kendi kendine işler, yalnızca yüzdeler bir sonraki sorguyu bekler.

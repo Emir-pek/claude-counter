@@ -18,6 +18,7 @@ try:
 except Exception:  # Pillow kurulu değilse overlay'siz devam edilir
     Image = ImageTk = None
 
+from formatting import GREEN, RED, YELLOW, color_for
 from win_theme import frame_hwnd
 
 SPRITE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
@@ -38,6 +39,17 @@ MOVE_MS = 16  # ~60 fps hareket
 
 # Sprite sağa bakıyor; açı "sağa bakmaktan itibaren saat yönünde derece".
 EDGE_ANGLES = {"top": 0, "right": 90, "bottom": 180, "left": 270}
+
+# Sprite sheet'in satırları: 0 sakin, 1 gergin, 2 kızgın.
+# Eşiklerin tek sahibi formatting.color_for; burada yalnızca döndürdüğü
+# seviye satıra çevriliyor — app.py'deki _BAR_COLOR ile aynı kalıp. Böylece
+# çubuk kırmızıya döndüğü an yengeç de kızıyor, ikisi asla çelişmiyor.
+TIER_BY_COLOR = {GREEN: 0, YELLOW: 1, RED: 2}
+MOOD_ROWS = len(TIER_BY_COLOR)
+
+# Kızgın yengeç daha hızlı yürüsün. Taban hızın katı olarak ifade ediliyor
+# ki CrabOverlay(speed=...) parametresi anlamını korusun.
+TIER_SPEED_FACTOR = (1.0, 1.2, 1.45)
 
 
 # --------------------------------------------------------------------------
@@ -121,24 +133,36 @@ def frame_boxes(count: int = FRAME_COUNT, size: int = FRAME_SIZE):
 
 
 def slice_sheet(sheet, count: int = FRAME_COUNT, size: int = FRAME_SIZE,
-                scale: int = SCALE):
-    """Sprite sheet'i karelere böler ve NEAREST ile büyütür.
+                scale: int = SCALE, row: int = 0):
+    """Sheet'in `row` satırını karelere böler ve NEAREST ile büyütür.
 
     NEAREST şart: pixel-art'ı bilinear büyütmek kenarları bulandırır.
     """
     frames = []
-    for box in frame_boxes(count, size):
-        frame = sheet.crop(box)
+    for x0, _y0, x1, _y1 in frame_boxes(count, size):
+        frame = sheet.crop((x0, row * size, x1, (row + 1) * size))
         if scale != 1:
             frame = frame.resize((size * scale, size * scale), Image.NEAREST)
         frames.append(frame)
     return frames
 
 
-def mood_from(five, seven):
-    """İki limit penceresinden meşgul olanın kullanımı; ikisi de yoksa None."""
-    values = [w.utilization for w in (five, seven) if w is not None]
-    return max(values) if values else None
+def mood_from(five_hour):
+    """Ruh hali 5 saatlik pencereden gelir; haftalık kasıtlı olarak yok sayılır.
+
+    Haftalık %90 olsa bile 5 saatlik %20'yse yengeç sakin kalmalı: kullanıcı
+    o an ne kadar sıkıştığını 5 saatlik dilimden okuyor.
+    """
+    return five_hour.utilization if five_hour is not None else None
+
+
+def tier_for(utilization: float) -> int:
+    """Kullanım yüzdesini sprite satırına çevirir (0 sakin … 2 kızgın)."""
+    return TIER_BY_COLOR[color_for(utilization)]
+
+
+def speed_for(tier: int, base: float = SPEED_PX_PER_SEC) -> float:
+    return base * TIER_SPEED_FACTOR[tier]
 
 
 # --------------------------------------------------------------------------
@@ -153,6 +177,7 @@ class NullCrab:
     """
 
     available = False
+    tier = 0
 
     def set_mood(self, utilization) -> None:
         pass
@@ -171,6 +196,7 @@ class CrabOverlay:
         self._margin = margin
         self._speed = speed
         self._mood = None
+        self._tier = 0
         self._distance = 0.0
         self._frame = 0
         self._rect = (0, 0, 0, 0)
@@ -195,7 +221,6 @@ class CrabOverlay:
             raise RuntimeError("Pillow yok")
 
         sheet = Image.open(sprite_path).convert("RGBA")
-        frames = slice_sheet(sheet)
 
         self._win = tk.Toplevel(self._app)
         # Toplevel başlığı ana pencereden miras alıyor; iki pencere aynı adı
@@ -211,16 +236,19 @@ class CrabOverlay:
                                  highlightthickness=0, borderwidth=0)
         self._canvas.pack(fill="both", expand=True)
 
-        # 4 yön x 8 kare açılışta üretilip saklanıyor. Her karede yeni
-        # PhotoImage yaratmak GC'nin sprite'ı toplamasına ve canvas'ın
-        # boşalmasına yol açar — referanslar burada tutulmak zorunda.
-        for angle in EDGE_ANGLES.values():
-            self._sprites[angle] = [
-                ImageTk.PhotoImage(f.rotate(-angle, expand=True)) for f in frames
-            ]
+        # 3 ruh hali x 4 yön x 8 kare açılışta üretilip saklanıyor. Her
+        # karede yeni PhotoImage yaratmak GC'nin sprite'ı toplamasına ve
+        # canvas'ın boşalmasına yol açar — referanslar burada tutulmak
+        # zorunda.
+        for tier in range(MOOD_ROWS):
+            frames = slice_sheet(sheet, row=tier)
+            self._sprites[tier] = {
+                angle: [ImageTk.PhotoImage(f.rotate(-angle, expand=True)) for f in frames]
+                for angle in EDGE_ANGLES.values()
+            }
 
         self._item = self._canvas.create_image(
-            0, 0, image=self._sprites[EDGE_ANGLES["top"]][0])
+            0, 0, image=self._sprites[0][EDGE_ANGLES["top"]][0])
 
         # Ana pencere zaten -topmost. İki topmost pencere arasında z-order
         # yarışı olur; overlay ana pencereden SONRA topmost yapılmazsa
@@ -316,12 +344,13 @@ class CrabOverlay:
         perim = perimeter_length(w, h)
         if perim <= 0:
             return
-        self._distance = (self._distance + self._speed * dt) % perim
+        self._distance = (self._distance + speed_for(self._tier, self._speed) * dt) % perim
         _edge, cx, cy, angle = position_at(self._distance, w, h)
         # Overlay çerçeveden margin kadar taşıyor; çerçeve koordinatı
         # overlay'in kendi koordinatına bu ofsetle çevriliyor.
         self._canvas.coords(self._item, cx + self._margin, cy + self._margin)
-        self._canvas.itemconfigure(self._item, image=self._sprites[angle][self._frame])
+        self._canvas.itemconfigure(
+            self._item, image=self._sprites[self._tier][angle][self._frame])
 
     def _safe_after(self, delay: int, fn):
         try:
@@ -332,9 +361,25 @@ class CrabOverlay:
 
     # -- dış arayüz -------------------------------------------------------
 
+    @property
+    def tier(self) -> int:
+        """Aktif ruh hali kademesi (0 sakin … 2 kızgın)."""
+        return self._tier
+
     def set_mood(self, utilization) -> None:
-        """İleriye dönük kanca: şimdilik yalnızca son değeri saklar."""
+        """5 saatlik kullanıma göre sakin / gergin / kızgın kademesini seçer.
+
+        None gelirse kademe korunuyor: veri gelmediğinde ruh hali son bilinen
+        değerde kalmalı, sıfırlanmamalı.
+        """
+        if utilization is None:
+            return
         self._mood = utilization
+        try:
+            self._tier = tier_for(utilization)
+        except Exception:
+            # Beklenmedik bir değer animasyonu durdurmamalı.
+            pass
 
     def _shutdown(self) -> None:
         for name in ("_move_timer", "_walk_timer"):

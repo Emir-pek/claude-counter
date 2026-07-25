@@ -1,7 +1,9 @@
 from PIL import Image
 
+import crab_overlay
 from crab_overlay import (EDGE_ANGLES, CrabOverlay, frame_boxes, frame_rect, mood_from,
-                          perimeter_length, position_at, slice_sheet)
+                          perimeter_length, position_at, slice_sheet, speed_for, tier_for)
+from formatting import RED
 from usage_client import Window
 
 W, H = 200, 100
@@ -109,6 +111,38 @@ def test_slicing_scales_with_nearest_neighbour():
     assert frames[0].size == (64, 64)
 
 
+def _mood_sheet(rows=3, count=8, size=32):
+    """Her satiri farkli renkte sentetik cok-satirli sheet."""
+    img = Image.new("RGBA", (count * size, rows * size), (0, 0, 0, 0))
+    for r in range(rows):
+        for i in range(count):
+            block = Image.new("RGBA", (size, size), (i * 20, r * 80, 90, 255))
+            img.paste(block, (i * size, r * size))
+    return img
+
+
+def test_slicing_reads_the_requested_mood_row():
+    sheet = _mood_sheet()
+    first = slice_sheet(sheet, count=8, size=32, scale=1, row=0)
+    last = slice_sheet(sheet, count=8, size=32, scale=1, row=2)
+    assert first[0].tobytes() != last[0].tobytes()
+
+
+def test_row_zero_is_the_default():
+    sheet = _mood_sheet()
+    assert (slice_sheet(sheet, count=8, size=32, scale=1)[0].tobytes()
+            == slice_sheet(sheet, count=8, size=32, scale=1, row=0)[0].tobytes())
+
+
+def test_shipped_sheet_carries_three_distinct_mood_rows():
+    # Satirlar ayni cikarsa kizgin yengec sakininden farksiz olur ve bu
+    # sessiz bir hata: hicbir istisna atilmaz, ruh hali sadece gorunmez.
+    sheet = Image.open(crab_overlay.SPRITE_PATH).convert("RGBA")
+    assert sheet.size == (256, 96)
+    rows = [slice_sheet(sheet, scale=1, row=r)[0].tobytes() for r in range(3)]
+    assert len(set(rows)) == 3
+
+
 def test_frame_rect_prefers_the_win32_getter():
     # winfo_* istemci alanini verir; nativ baslik cubugu onun DISINDA kalir.
     assert frame_rect(FakeApp(), getter=lambda a: (10, 20, 300, 400)) == (10, 20, 300, 400)
@@ -139,18 +173,71 @@ def test_set_mood_is_safe_on_an_unavailable_overlay():
     crab.set_mood(None)
 
 
-def test_mood_takes_the_busier_window():
-    five = Window(utilization=30.0, resets_at=None)
-    seven = Window(utilization=78.0, resets_at=None)
-    assert mood_from(five, seven) == 78.0
-    assert mood_from(seven, five) == 78.0
+def _moodless_crab():
+    # Tk gerektirmeden ruh hali mantigini surmek icin: sprite yok, ama
+    # set_mood/tier tamamen saf.
+    return CrabOverlay(FakeApp(), sprite_path="yok_boyle_bir_dosya.png")
 
 
-def test_mood_ignores_a_missing_window():
-    assert mood_from(None, Window(utilization=12.0, resets_at=None)) == 12.0
-    assert mood_from(Window(utilization=12.0, resets_at=None), None) == 12.0
+def test_set_mood_moves_through_the_tiers():
+    crab = _moodless_crab()
+    crab.set_mood(10.0)
+    assert crab.tier == 0
+    crab.set_mood(70.0)
+    assert crab.tier == 1
+    crab.set_mood(95.0)
+    assert crab.tier == 2
 
 
-def test_mood_is_none_when_both_windows_are_missing():
+def test_missing_data_leaves_the_mood_where_it_was():
+    # render_error ve 5 saatlik pencerenin bos gelmesi ruh halini
+    # sifirlamamali; kizgin yengec veri kesildi diye sakinlesmemeli.
+    crab = _moodless_crab()
+    crab.set_mood(95.0)
+    crab.set_mood(None)
+    assert crab.tier == 2
+
+
+def test_crab_starts_calm():
+    assert _moodless_crab().tier == 0
+
+
+def test_mood_comes_from_the_five_hour_window():
+    assert mood_from(Window(utilization=78.0, resets_at=None)) == 78.0
+
+
+def test_mood_is_none_without_a_five_hour_window():
     # Veri yokken ruh hali son bilinen degerde kalmali, sifirlanmamali.
-    assert mood_from(None, None) is None
+    assert mood_from(None) is None
+
+
+def test_calm_tense_angry_follow_the_bar_colours():
+    # Esikler formatting.color_for'da: <60 yesil, 60-85 sari, >85 kirmizi.
+    assert tier_for(0.0) == 0
+    assert tier_for(59.9) == 0
+    assert tier_for(60.0) == 1
+    assert tier_for(85.0) == 1
+    assert tier_for(85.1) == 2
+    assert tier_for(100.0) == 2
+
+
+def test_tier_is_derived_from_color_for_not_its_own_thresholds(monkeypatch):
+    # Esik tek yerde kalmali: formatting.py degisirse yengec de degismeli,
+    # yoksa cubuk kirmiziyken yengec sakin kalir ve ikisi celisir.
+    monkeypatch.setattr(crab_overlay, "color_for", lambda util: RED)
+    assert tier_for(0.0) == 2
+
+
+def test_every_tier_has_a_sprite_row():
+    assert {tier_for(10.0), tier_for(70.0), tier_for(95.0)} == {0, 1, 2}
+
+
+def test_angry_crab_walks_faster_than_a_calm_one():
+    assert speed_for(0, base=40.0) == 40.0, "sakin kademe taban hiz olmali"
+    assert speed_for(1, base=40.0) > speed_for(0, base=40.0)
+    assert speed_for(2, base=40.0) > speed_for(1, base=40.0)
+
+
+def test_speed_scales_with_the_injected_base():
+    # base parametresi anlamini korumali; sabit hizlar gomulmemeli.
+    assert speed_for(2, base=100.0) == 2 * speed_for(2, base=50.0)
