@@ -72,7 +72,12 @@ Başlatıcı olmadan kaynaktan çalıştırma: `pythonw main.py`
 Dosya düzeni: `main.py` parçaları birbirine bağlar, `scheduling.py` bir sonraki
 sorgunun ne zaman yapılacağına karar verir (aralık, geri çekilme, aynı anda tek
 istek), `app.py` CustomTkinter penceresi, `usage_client.py` veri çekme ve
-ayrıştırma, `formatting.py` geri sayım ve renk kuralları.
+ayrıştırma, `formatting.py` geri sayım ve renk kuralları, `win_theme.py`
+Windows 11 başlık çubuğu rengi.
+
+Pencere simgesi elle çizilmedi, üretiliyor: `python -m tools.gen_icon`
+komutu `assets/claude_counter.ico` dosyasını yalnızca standart kütüphaneyle
+yeniden yazar.
 
 ## Sorun giderme
 

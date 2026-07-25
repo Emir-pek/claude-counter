@@ -77,7 +77,11 @@ Run from source without the launcher: `pythonw main.py`
 Layout: `main.py` wires everything together, `scheduling.py` decides when the
 next poll happens (interval, backoff, one-request-at-a-time), `app.py` is the
 CustomTkinter window, `usage_client.py` the fetch and parse layer,
-`formatting.py` the countdown and color rules.
+`formatting.py` the countdown and color rules, `win_theme.py` the Windows 11
+titlebar tint.
+
+The window icon is generated, not hand-drawn: `python -m tools.gen_icon`
+rewrites `assets/claude_counter.ico` using nothing but the standard library.
 
 ## Troubleshooting
 

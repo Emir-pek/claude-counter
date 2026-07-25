@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import os
 from datetime import datetime, timezone
 
 import customtkinter as ctk
 
 from formatting import GREEN, RED, YELLOW, color_for, format_countdown, format_reset_time
 from usage_client import UsageData, UsageError
+from win_theme import apply_titlebar_theme, frame_hwnd
 
 ctk.set_appearance_mode("dark")
 
@@ -22,7 +24,40 @@ COLORS = {
     "bar_mid": "#D4A27F",
     "bar_critical": "#BF4D3B",
     "bar_track": "#3D3D3A",
+    # Başlık çubuğu ayrı bir rol; accent_hover ödünç alınmadı, o düğme
+    # hover'ının anlamı ve bağımsız değişebilmeli.
+    "titlebar": "#C25F42",
+    "titlebar_text": "#FAF9F5",
 }
+
+ICON_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                         "assets", "claude_counter.ico")
+
+
+def set_window_icon(window, icon_path: str = ICON_PATH) -> bool:
+    """Pencere simgesini uygular. Simge yokluğu widget'ı açılmaz yapmamalı."""
+    try:
+        window.iconbitmap(icon_path)
+        return True
+    except Exception:
+        return False
+
+
+def theme_titlebar(window) -> bool:
+    """Başlık çubuğunu Claude turuncusuna boyar (Windows 11).
+
+    Eski Windows'ta DWM bu attribute'ları tanımaz; başarısızlık yutulur ve
+    pencere varsayılan çubuğuyla çalışmaya devam eder.
+    """
+    try:
+        return apply_titlebar_theme(
+            frame_hwnd(window),
+            caption=COLORS["titlebar"],
+            text=COLORS["titlebar_text"],
+            border=COLORS["titlebar"],
+        )
+    except Exception:
+        return False
 
 # Eşik mantığının tek sahibi formatting.color_for. Burada yalnızca
 # döndürdüğü seviye ekranda kullanılan renge çevriliyor; böylece
@@ -186,6 +221,10 @@ class UsageApp(ctk.CTk):
             text_color=COLORS["text_secondary"],
         )
         self.status.grid(row=3, column=0, sticky="ew", padx=PAD_WINDOW, pady=(0, PAD_WINDOW))
+
+        set_window_icon(self)
+        # Pencere haritalanmadan DWM çağrısı tutmuyor, ilk boşta uygula.
+        self.after(0, lambda: theme_titlebar(self))
 
     def _refresh_clicked(self):
         if self.on_refresh:
