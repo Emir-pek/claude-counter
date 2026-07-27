@@ -133,7 +133,9 @@ def fetch_usage(path: str = CREDENTIALS_PATH, url: str = USAGE_URL,
             body = resp.read()
     except urllib.error.HTTPError as e:
         if e.code == 401:
-            return UsageError("unauthorized", "Oturum süresi dolmuş — Claude Code'da giriş yapın")
+            # Mesajlar durum satırına sığacak kadar kısa tutuluyor;
+            # widget dar ve kırpılan bir uyarı işe yaramaz.
+            return UsageError("unauthorized", "Oturum doldu — giriş yapın")
         if e.code == 429:
             # Ayrı bir kind: zamanlayıcının geri çekilmesi gereken tek durum.
             return UsageError("rate_limited", "İstek sınırı — bekleniyor",

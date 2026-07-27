@@ -69,8 +69,21 @@ _BAR_COLOR = {
     RED: COLORS["bar_critical"],
 }
 
-PAD_WINDOW = 12  # pencere iç kenar boşluğu
-PAD_CARD = 10  # kartlar arası boşluk
+PAD_WINDOW = 10  # pencere iç kenar boşluğu
+PAD_CARD = 8  # kartlar arası boşluk
+
+# CTkLabel varsayılanı 28px; metin 17-20px'e sığıyor. Altı label boyunca
+# aradaki fark pencerenin yüksekliğinde göze batıyordu, o yüzden her
+# label kendi satır yüksekliğine sabitleniyor. (CTk font boyutunu punto
+# değil piksel olarak uyguluyor: 11 -> 11px yüksek harfler.)
+LINE_TITLE = 20  # 11'lik başlık
+LINE_TEXT = 17  # 10'luk gövde
+
+# Pencere içeriğine göre ölçülmüş sabit boyut. Genişliği belirleyen
+# şey kartlar değil, durum satırındaki en uzun hata mesajı; yerleşim
+# değişince test_layout.py kırpma sınırından haber veriyor.
+WINDOW_W = 200
+WINDOW_H = 200
 
 
 class _Row:
@@ -90,13 +103,17 @@ class _Row:
             self.card,
             text=title,
             anchor="w",
-            font=("Segoe UI", 12, "bold"),
+            height=LINE_TITLE,
+            font=("Segoe UI", 11, "bold"),
             text_color=COLORS["text_primary"],
         )
         self.bar = ctk.CTkProgressBar(
             self.card,
-            height=8,
-            corner_radius=4,
+            # Varsayılan 200px genişlik pencerenin darlığına taban
+            # koyuyordu; bar zaten sticky="ew" ile satıra yayılıyor.
+            width=120,
+            height=6,
+            corner_radius=3,
             fg_color=COLORS["bar_track"],
             progress_color=COLORS["bar_safe"],
         )
@@ -107,14 +124,16 @@ class _Row:
             self.card,
             text="",
             anchor="w",
-            font=("Segoe UI", 11, "bold"),
+            height=LINE_TEXT,
+            font=("Segoe UI", 10, "bold"),
             text_color=COLORS["text_secondary"],
         )
         self.info = ctk.CTkLabel(
             self.card,
             text="—",
             anchor="w",
-            font=("Segoe UI", 11),
+            height=LINE_TEXT,
+            font=("Segoe UI", 10),
             text_color=COLORS["text_secondary"],
         )
 
@@ -125,12 +144,12 @@ class _Row:
         self._reset_text = ""
         self._last_info = None
 
-    def grid(self, r: int):
-        self.card.grid(row=r, column=0, sticky="ew", padx=PAD_WINDOW, pady=(0, PAD_CARD))
-        self.title.grid(row=0, column=0, columnspan=2, sticky="w", padx=12, pady=(10, 6))
-        self.bar.grid(row=1, column=0, columnspan=2, sticky="ew", padx=12)
-        self.pct.grid(row=2, column=0, sticky="w", padx=(12, 6), pady=(6, 10))
-        self.info.grid(row=2, column=1, sticky="w", padx=(0, 12), pady=(6, 10))
+    def grid(self, r: int, pady_bottom: int = PAD_CARD):
+        self.card.grid(row=r, column=0, sticky="ew", padx=PAD_WINDOW, pady=(0, pady_bottom))
+        self.title.grid(row=0, column=0, columnspan=2, sticky="w", padx=10, pady=(7, 5))
+        self.bar.grid(row=1, column=0, columnspan=2, sticky="ew", padx=10)
+        self.pct.grid(row=2, column=0, sticky="w", padx=(10, 6), pady=(5, 7))
+        self.info.grid(row=2, column=1, sticky="w", padx=(0, 10), pady=(5, 7))
 
     def set(self, window):
         self.window = window
@@ -186,7 +205,7 @@ class UsageApp(ctk.CTk):
     def __init__(self):
         super().__init__()
         self.title("Claude Kullanımı")
-        self.geometry("260x310")
+        self.geometry(f"{WINDOW_W}x{WINDOW_H}")
         self.resizable(False, False)
         self.attributes("-topmost", True)
         self.configure(fg_color=COLORS["window"])
@@ -194,39 +213,40 @@ class UsageApp(ctk.CTk):
         self.on_refresh = None
         self._data = None
 
-        header = ctk.CTkFrame(self, fg_color="transparent")
-        header.grid(row=0, column=0, sticky="ew", padx=PAD_WINDOW, pady=(PAD_WINDOW, PAD_CARD))
-        header.grid_columnconfigure(0, weight=1)
-        ctk.CTkLabel(
-            header,
-            text="Claude Kullanımı",
-            font=("Segoe UI", 12, "bold"),
-            text_color=COLORS["text_primary"],
-        ).grid(row=0, column=0, sticky="w")
-        ctk.CTkButton(
-            header,
+        # Pencere başlığı zaten "Claude Kullanımı" yazıyor; aynı metni
+        # içeride tekrarlamak bir satır harcıyordu. O satırı durum
+        # metni devraldı: hem son güncelleme saati hem hata mesajı.
+        self.header = ctk.CTkFrame(self, fg_color="transparent")
+        self.header.grid(row=0, column=0, sticky="ew", padx=PAD_WINDOW,
+                         pady=(PAD_WINDOW, PAD_CARD))
+        self.header.grid_columnconfigure(0, weight=1)
+        self.status = ctk.CTkLabel(
+            self.header,
+            text="yükleniyor…",
+            anchor="w",
+            height=LINE_TEXT,
+            font=("Segoe UI", 10),
+            text_color=COLORS["text_secondary"],
+        )
+        self.status.grid(row=0, column=0, sticky="ew")
+        self.refresh = ctk.CTkButton(
+            self.header,
             text="↻",
-            width=28,
+            width=26,
+            height=24,
             corner_radius=6,
             fg_color=COLORS["accent"],
             hover_color=COLORS["accent_hover"],
             text_color=COLORS["text_primary"],
             command=self._refresh_clicked,
-        ).grid(row=0, column=1)
+        )
+        self.refresh.grid(row=0, column=1, padx=(PAD_CARD, 0))
 
         self.five = _Row(self, "5 saatlik")
         self.five.grid(1)
         self.seven = _Row(self, "Haftalık")
-        self.seven.grid(2)
-
-        self.status = ctk.CTkLabel(
-            self,
-            text="yükleniyor…",
-            anchor="e",
-            font=("Segoe UI", 10),
-            text_color=COLORS["text_secondary"],
-        )
-        self.status.grid(row=3, column=0, sticky="ew", padx=PAD_WINDOW, pady=(0, PAD_WINDOW))
+        # Son kartın altı pencere kenarı: kart arası değil, kenar boşluğu.
+        self.seven.grid(2, pady_bottom=PAD_WINDOW)
 
         set_window_icon(self)
         # Pencere haritalanmadan DWM çağrısı tutmuyor, ilk boşta uygula.

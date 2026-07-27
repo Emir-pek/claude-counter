@@ -106,7 +106,7 @@ rewrites `assets/claude_counter.ico` using nothing but the standard library.
 | --- | --- |
 | "Python was not found" | Install Python 3.10+ and tick "Add python.exe to PATH" |
 | Widget says `Claude oturumu bulunamadı` | Log in with Claude Code first |
-| Widget says `Oturum süresi dolmuş` | Your session expired — log in with Claude Code again |
+| Widget says `Oturum doldu` | Your session expired — log in with Claude Code again |
 | Widget says `Bağlantı yok` | No internet connection |
 | Something broke after an update | Delete the `.venv` folder, then double-click `baslat.bat` again |
 

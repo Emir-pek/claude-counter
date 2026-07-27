@@ -102,7 +102,7 @@ yeniden yazar.
 | --- | --- |
 | "Python was not found" | Python 3.10+ kurun, "Add python.exe to PATH" işaretli olsun |
 | `Claude oturumu bulunamadı` | Önce Claude Code ile giriş yapın |
-| `Oturum süresi dolmuş` | Oturumunuz bitmiş — Claude Code ile tekrar giriş yapın |
+| `Oturum doldu` | Oturumunuz bitmiş — Claude Code ile tekrar giriş yapın |
 | `Bağlantı yok` | İnternet bağlantısı yok |
 | Güncellemeden sonra bozuldu | `.venv` klasörünü silin, `baslat.bat`'a tekrar çift tıklayın |
 
