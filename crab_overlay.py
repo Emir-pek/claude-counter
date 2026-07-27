@@ -31,7 +31,7 @@ TRANSPARENT_KEY = "#FF00FF"
 
 FRAME_SIZE = 32
 FRAME_COUNT = 8
-SCALE = 2
+SCALE = 1
 MARGIN = 40  # overlay çerçeveden her yöne bu kadar taşar
 SPEED_PX_PER_SEC = 40.0
 WALK_MS = 125  # 8 fps yürüyüş
