@@ -189,3 +189,50 @@ def test_instant_snap_cancels_a_pending_tween(widget):
     finally:
         widget.after = original_after
         widget._set_expanded(False, animate=False)
+
+
+def test_close_hides_the_card_and_shows_the_reopen_tab(widget):
+    widget._on_close_click()
+    try:
+        assert widget.state() == "withdrawn"
+        assert widget.reopen_tab.state() != "withdrawn"
+    finally:
+        widget.reopen()
+
+
+def test_reopen_restores_the_idle_card(widget):
+    widget._on_close_click()
+    widget.reopen_tab._on_click()
+    assert widget.state() != "withdrawn"
+    assert widget.reopen_tab.state() == "withdrawn"
+    assert widget._expanded is False
+
+
+def test_reopen_tab_quit_menu_calls_quit_app(widget, monkeypatch):
+    called = []
+    monkeypatch.setattr(widget, "quit_app", lambda: called.append(True))
+    widget.reopen_tab._menu.invoke(0)
+    assert called == [True]
+
+
+def test_quit_app_cancels_a_pending_ring_timer(widget, monkeypatch):
+    # Task 7'nin _ring_after zamanlayıcısı, kritik durumdayken kendini
+    # yeniden zamanlar (self.after(RING_TICK_MS, ...)). quit_app() ilk defa
+    # gerçekten .destroy() çağıran yol olduğu için, bekleyen bir ring
+    # callback'i yok edilmiş pencereye karşı ateşleyip hataya yol açmamalı.
+    # Gerçek destroy() paylaşılan modül kapsamlı widget'ı (ve bu süreçteki
+    # tek Tk yorumlayıcısını) yok edip sonraki testleri/teardown'ı
+    # kıracağından burada no-op'a alınıyor; yalnızca zamanlayıcı iptalinin
+    # gerçekleştiğini doğruluyoruz.
+    monkeypatch.setattr(widget, "destroy", lambda: None)
+    monkeypatch.setattr(widget.reopen_tab, "destroy", lambda: None)
+    original_level = widget._level
+    try:
+        widget._level = app_module.RED
+        widget._update_dot()
+        assert widget._ring_after is not None
+        widget.quit_app()
+        assert widget._ring_after is None
+    finally:
+        widget._level = original_level
+        widget._update_dot()

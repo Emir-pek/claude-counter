@@ -186,6 +186,57 @@ class _Row:
             self.countdown.configure(text=text)
 
 
+class ReopenTab(tk.Toplevel):
+    """Kart gizlendiğinde köşede kalan küçük 'yeniden aç' sekmesi."""
+
+    def __init__(self, app: "UsageApp"):
+        super().__init__(app)
+        self._app = app
+        self.overrideredirect(True)
+        self.attributes("-topmost", True)
+        self.attributes("-alpha", 0.85)
+        self.configure(bg=COLORS["window"])
+
+        canvas = tk.Canvas(self, width=REOPEN_SIZE, height=REOPEN_SIZE,
+                           bg=COLORS["window"], highlightthickness=0, bd=0)
+        canvas.pack(fill="both", expand=True)
+        r = 4
+        cx = cy = REOPEN_SIZE / 2
+        canvas.create_oval(cx - r, cy - r, cx + r, cy + r,
+                           fill=COLORS["accent"], outline="")
+        canvas.bind("<Button-1>", self._on_click)
+        canvas.bind("<Button-3>", self._on_menu)
+
+        self._menu = tk.Menu(self, tearoff=0)
+        # command=self._app.quit_app doğrudan bağlanırsa (early binding),
+        # __init__ anındaki quit_app metodunu sabitler; testlerin
+        # monkeypatch.setattr(app, "quit_app", ...) ile yaptığı override
+        # görülmez ve menü hep gerçek quit_app'i çağırır. lambda ile çağrı
+        # anında self._app.quit_app'i yeniden çözüyoruz (late binding).
+        self._menu.add_command(label="Çıkış", command=lambda: self._app.quit_app())
+
+        self.withdraw()
+
+    def show(self):
+        work = work_area_rect() or (0, 0, self._app.winfo_screenwidth(),
+                                    self._app.winfo_screenheight())
+        x, y = corner_position(work, (REOPEN_SIZE, REOPEN_SIZE), CORNER, SCREEN_MARGIN)
+        self.geometry(f"{REOPEN_SIZE}x{REOPEN_SIZE}+{x}+{y}")
+        self.update_idletasks()
+        try:
+            set_rounded_region(frame_hwnd(self), REOPEN_SIZE, REOPEN_SIZE, 10)
+        except Exception:
+            pass
+        self.deiconify()
+
+    def _on_click(self, _event=None):
+        self.withdraw()
+        self._app.reopen()
+
+    def _on_menu(self, event):
+        self._menu.tk_popup(event.x_root, event.y_root)
+
+
 class UsageApp(ctk.CTk):
     def __init__(self):
         super().__init__()
@@ -257,13 +308,34 @@ class UsageApp(ctk.CTk):
         self.update_idletasks()
         self._set_expanded(False, animate=False)
         self.after(HOVER_POLL_MS, self._poll_hover_loop)
+        self.reopen_tab = ReopenTab(self)
 
     def _on_refresh_click(self, _event=None):
         if self.on_refresh:
             self.on_refresh()
 
     def _on_close_click(self, _event=None):
-        pass  # Task 8'de dolduruluyor
+        self.withdraw()
+        self.reopen_tab.show()
+
+    def reopen(self):
+        self.deiconify()
+        self._set_expanded(False, animate=False)
+
+    def quit_app(self):
+        # Task 7'nin _ring_after zamanlayıcısı kritik durumdayken kendini
+        # yeniden zamanlar. Bu, o zamanlayıcı beklerken gerçekten .destroy()
+        # çağırabilen ilk yol — bekleyen callback yok edilmiş pencereye karşı
+        # ateşlenip hataya yol açmasın diye önce iptal ediyoruz. Kapanışı
+        # engellememesi için sarmalanmış.
+        if self._ring_after is not None:
+            try:
+                self.after_cancel(self._ring_after)
+            except Exception:
+                pass
+            self._ring_after = None
+        self.reopen_tab.destroy()
+        self.destroy()
 
     def _set_expanded(self, expanded: bool, animate: bool = True):
         self._expanded = expanded
