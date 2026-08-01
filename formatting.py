@@ -8,23 +8,23 @@ RED = "#e74c3c"
 
 # weekday() sırası: 0 = Pazartesi. strftime("%a") kullanılmıyor,
 # çünkü sistem diline bağlı ve bu makinede "Fri" döndürüyor.
-DAY_NAMES = ("Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz")
+DAY_NAMES = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 
 
 def format_countdown(resets_at: datetime, now: datetime) -> str:
     secs = int((resets_at - now).total_seconds())
     if secs <= 0:
-        return "yenilendi"
+        return "reset"
     days, rem = divmod(secs, 86400)
     hours, rem = divmod(rem, 3600)
     mins = rem // 60
     if days > 0:
-        return f"{days}g {hours}s"
+        return f"{days}d {hours}h"
     if hours > 0:
-        return f"{hours}s {mins}dk"
+        return f"{hours}h {mins}m"
     if mins > 0:
-        return f"{mins}dk"
-    return "1dk"
+        return f"{mins}m"
+    return "1m"
 
 
 def color_for(util: float) -> str:
