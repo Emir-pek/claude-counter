@@ -76,7 +76,7 @@ _BAR_COLOR = {
 # projenin geri kalan ayarlarının (COLORS, eski WINDOW_W) zaten yaptığı gibi.
 CORNER = "bottom-right"  # "bottom-right" | "bottom-left" | "top-right" | "top-left"
 SCREEN_MARGIN = 16
-IDLE_OPACITY = 0.55
+IDLE_OPACITY = 0.7
 EXPAND_ON_HOVER = True
 
 CARD_RADIUS = 14
@@ -86,12 +86,12 @@ BAR_H_IDLE = 5
 BAR_H_EXPANDED = 7
 DOT_SIZE = 8
 RING_SIZE = 14
-DOT_CANVAS_SIZE = 24
+DOT_CANVAS_SIZE = 28  # was 24 — gives the ring/glow (max radius ~11.9px at peak) room clear of the rounded-corner cutout
 REOPEN_SIZE = 34
 
 HOVER_POLL_MS = 50
-TWEEN_MS = 280
-TWEEN_STEPS = 8
+TWEEN_MS = 180
+TWEEN_STEPS = 18
 RING_TICK_MS = 60
 
 
@@ -113,7 +113,7 @@ class _Row:
         )
         self.bar.set(0)
         self.pct = ctk.CTkLabel(
-            self.frame, text="", width=30, anchor="e",
+            self.frame, text="", width=44, anchor="e",
             font=("Segoe UI", 11, "bold"), text_color=COLORS["text_secondary"],
         )
         self.label.grid(row=0, column=0, sticky="w")
@@ -179,7 +179,7 @@ class _Row:
 
         text = format_countdown(resets_at, now)
         if self._reset_text:
-            text += f" · sıfırlanma {self._reset_text}"
+            text += f" · resets {self._reset_text}"
 
         if text != self._last_text:
             self._last_text = text
@@ -213,7 +213,7 @@ class ReopenTab(tk.Toplevel):
         # monkeypatch.setattr(app, "quit_app", ...) ile yaptığı override
         # görülmez ve menü hep gerçek quit_app'i çağırır. lambda ile çağrı
         # anında self._app.quit_app'i yeniden çözüyoruz (late binding).
-        self._menu.add_command(label="Çıkış", command=lambda: self._app.quit_app())
+        self._menu.add_command(label="Quit", command=lambda: self._app.quit_app())
 
         self.withdraw()
 
@@ -240,7 +240,7 @@ class ReopenTab(tk.Toplevel):
 class UsageApp(ctk.CTk):
     def __init__(self):
         super().__init__()
-        self.title("Claude Kullanımı")
+        self.title("Claude Usage")
         self.overrideredirect(True)
         self.attributes("-topmost", True)
         self.configure(fg_color=COLORS["window"])
@@ -264,7 +264,7 @@ class UsageApp(ctk.CTk):
         self.header = ctk.CTkFrame(self.card, fg_color="transparent")
         self.header.grid_columnconfigure(0, weight=1)
         self.title_label = ctk.CTkLabel(
-            self.header, text="Claude Kullanımı", anchor="w",
+            self.header, text="Claude Usage", anchor="w",
             font=("Segoe UI", 11, "bold"), text_color=COLORS["text_primary"],
         )
         self.title_label.grid(row=0, column=0, sticky="w")
@@ -277,15 +277,15 @@ class UsageApp(ctk.CTk):
             self.header, text="✕", width=12, font=("Segoe UI", 11),
             text_color=COLORS["text_secondary"], cursor="hand2",
         )
-        self.close_icon.grid(row=0, column=2)
+        self.close_icon.grid(row=0, column=2, padx=(0, 6))
         self.refresh_icon.bind("<Button-1>", self._on_refresh_click)
         self.close_icon.bind("<Button-1>", self._on_close_click)
         self.header.grid(row=0, column=0, sticky="ew", padx=10, pady=(8, 6))
         self.header.grid_remove()
 
-        self.five = _Row(self.card, "5s")
+        self.five = _Row(self.card, "5h")
         self.five.grid(1)
-        self.seven = _Row(self.card, "7g")
+        self.seven = _Row(self.card, "7d")
         self.seven.grid(3)
         self.five.frame.grid_configure(padx=10, pady=(8, 0))
         self.seven.frame.grid_configure(padx=10, pady=(6, 0))
@@ -300,7 +300,7 @@ class UsageApp(ctk.CTk):
             self.card, width=DOT_CANVAS_SIZE, height=DOT_CANVAS_SIZE,
             bg=COLORS["window"], highlightthickness=0, bd=0,
         )
-        self.dot_canvas.place(relx=1.0, rely=0.0, anchor="ne", x=-2, y=2)
+        self.dot_canvas.place(relx=1.0, rely=0.0, anchor="ne", x=-4, y=4)
         self._redraw_dot()
 
         set_window_icon(self)
@@ -510,7 +510,7 @@ class UsageApp(ctk.CTk):
 
     def render_error(self, err: UsageError):
         if err.kind == "rate_limited":
-            self._status_text = "Sınıra takıldı — yeniden deneniyor"
+            self._status_text = "Rate limited — retrying"
             self._status_color = COLORS["bar_mid"]
         else:
             self._status_text = err.message
