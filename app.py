@@ -418,7 +418,6 @@ class UsageApp(ctk.CTk):
         self._update_dot()
         self._refresh_status_visibility()
 
-
     def render_error(self, err: UsageError):
         if err.kind == "rate_limited":
             self._status_text = "Sınıra takıldı — yeniden deneniyor"
