@@ -274,7 +274,7 @@ class UsageApp(ctk.CTk):
         )
         self.refresh_icon.grid(row=0, column=1, padx=(8, 4))
         self.close_icon = ctk.CTkLabel(
-            self.header, text="✕", width=12, font=("Segoe UI", 11),
+            self.header, text="✕", width=16, font=("Segoe UI", 11),
             text_color=COLORS["text_secondary"], cursor="hand2",
         )
         self.close_icon.grid(row=0, column=2, padx=(0, 6))
