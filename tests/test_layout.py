@@ -83,3 +83,11 @@ def test_render_clears_the_status_line(widget):
 def test_window_is_smaller_than_the_old_decorated_layout(widget):
     assert app_module.CARD_W_IDLE < 260
     assert app_module.CARD_W_EXPANDED < 260
+
+
+def test_snap_to_survives_a_win32_failure(widget, monkeypatch):
+    def _boom(_window):
+        raise OSError("GetParent failed")
+
+    monkeypatch.setattr(app_module, "frame_hwnd", _boom)
+    widget._snap_to(app_module.CARD_W_IDLE, 100, app_module.IDLE_OPACITY)

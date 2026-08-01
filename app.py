@@ -286,7 +286,10 @@ class UsageApp(ctk.CTk):
         self.geometry(f"{width}x{height}+{x}+{y}")
         self.attributes("-alpha", alpha)
         self.update_idletasks()
-        set_rounded_region(frame_hwnd(self), width, height, CARD_RADIUS)
+        try:
+            set_rounded_region(frame_hwnd(self), width, height, CARD_RADIUS)
+        except Exception:
+            pass
         self._laid_out = True
 
     def _refresh_status_visibility(self):
