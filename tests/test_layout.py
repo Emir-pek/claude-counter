@@ -9,6 +9,7 @@ from usage_client import UsageData, UsageError, Window
 @pytest.fixture(scope="module")
 def widget():
     w = app_module.UsageApp()
+    w.update()
     w.withdraw()
     yield w
     w.destroy()
