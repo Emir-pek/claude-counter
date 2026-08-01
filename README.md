@@ -9,10 +9,10 @@ resets.
 
 ![Claude Counter](docs/screenshot.png)
 
-> **Note:** the widget's interface is currently in Turkish (`5s` = 5-hour,
-> `7g` = weekly). A status line only appears — and only while the card is
-> expanded — when there's something to report: a network error or a
-> rate-limit backoff. Otherwise it stays hidden.
+> **Note:** the row labels read `5h` (5-hour) and `7d` (weekly). A status
+> line only appears — and only while the card is expanded — when there's
+> something to report: a network error or a rate-limit backoff. Otherwise
+> it stays hidden.
 
 ## Requirements
 
