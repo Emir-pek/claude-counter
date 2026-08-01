@@ -122,7 +122,7 @@ def fetch_usage(path: str = CREDENTIALS_PATH, url: str = USAGE_URL,
     try:
         token = read_token(path)
     except NoCredentialsError:
-        return UsageError("no_credentials", "Claude oturumu bulunamadı")
+        return UsageError("no_credentials", "No Claude session found")
 
     req = urllib.request.Request(url, headers={
         "Authorization": f"Bearer {token}",
@@ -135,19 +135,19 @@ def fetch_usage(path: str = CREDENTIALS_PATH, url: str = USAGE_URL,
         if e.code == 401:
             # Mesajlar durum satırına sığacak kadar kısa tutuluyor;
             # widget dar ve kırpılan bir uyarı işe yaramaz.
-            return UsageError("unauthorized", "Oturum doldu — giriş yapın")
+            return UsageError("unauthorized", "Session expired — please log in")
         if e.code == 429:
             # Ayrı bir kind: zamanlayıcının geri çekilmesi gereken tek durum.
-            return UsageError("rate_limited", "İstek sınırı — bekleniyor",
+            return UsageError("rate_limited", "Rate limited — waiting",
                               retry_after=parse_retry_after(_header(e.headers, "Retry-After")))
-        return UsageError("network", f"Sunucu hatası ({e.code})")
+        return UsageError("network", f"Server error ({e.code})")
     except (urllib.error.URLError, TimeoutError, OSError):
-        return UsageError("network", "Bağlantı yok")
+        return UsageError("network", "No connection")
 
     try:
         payload = json.loads(body)
     except (json.JSONDecodeError, ValueError):
-        return UsageError("bad_response", "Beklenmedik yanıt")
+        return UsageError("bad_response", "Unexpected response")
     if not isinstance(payload, dict):
-        return UsageError("bad_response", "Beklenmedik yanıt")
+        return UsageError("bad_response", "Unexpected response")
     return parse_usage(payload, datetime.now(timezone.utc))
