@@ -153,3 +153,39 @@ def test_poll_hover_collapses_when_pointer_leaves(widget):
     finally:
         widget.winfo_pointerxy = original
         widget._set_expanded(False, animate=False)
+
+
+def test_instant_snap_cancels_a_pending_tween(widget):
+    # Bir tween ortasında animate=False ile anlık bir snap gelirse, tween'in
+    # zaten zamanlanmış after() adımları sessizce askıda kalmamalı — devreye
+    # girdiklerinde eski (artık geçersiz) hedefe doğru sürüklemeye
+    # başlamamalılar. self.after()'ı yakalayıp bu bekleyen adımı elle
+    # tetikleyerek deterministik biçimde doğruluyoruz.
+    widget._set_expanded(False, animate=False)
+    pending = []
+    original_after = widget.after
+
+    def capturing_after(delay, callback=None, *args):
+        if callback is None:
+            return original_after(delay)
+        pending.append(callback)
+        return "fake-after-id"
+
+    widget.after = capturing_after
+    try:
+        widget._set_expanded(True, animate=True)  # tween başlar, bir sonraki kare after() ile zamanlanır
+        assert pending, "tween en az bir after() adımı zamanlamalıydı"
+
+        widget._set_expanded(False, animate=False)  # anlık snap: bekleyen tween'i geçersiz kılmalı
+        assert _width(widget) == app_module.CARD_W_IDLE
+        assert widget.attributes("-alpha") == pytest.approx(app_module.IDLE_OPACITY)
+
+        for callback in pending:
+            callback()  # tween'in artık öksüz kalan adımını elle tetikle
+
+        # Öksüz adım hiçbir şey yapmamalı: geometri hâlâ anlık snap hedefinde.
+        assert _width(widget) == app_module.CARD_W_IDLE
+        assert widget.attributes("-alpha") == pytest.approx(app_module.IDLE_OPACITY)
+    finally:
+        widget.after = original_after
+        widget._set_expanded(False, animate=False)

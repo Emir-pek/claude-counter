@@ -302,6 +302,16 @@ class UsageApp(ctk.CTk):
             self._tween_to(width, height, alpha)
 
     def _snap_to(self, width: int, height: int, alpha: float):
+        # Herhangi bir dışarıdan çağrılan anlık snap, o an sürmekte olan bir
+        # tween'i (varsa) geçersiz kılmalı — yoksa tween'in bekleyen after()
+        # adımları bu anlık geometriyle çakışıp eski hedefe doğru sürüklemeye
+        # devam eder. _tween_to kendi adımları için _apply_geometry'yi
+        # doğrudan çağırır (bu metodu değil), böylece kendi token'ını her
+        # karede kendi kendine geçersiz kılmaz.
+        self._tween_token = getattr(self, "_tween_token", 0) + 1
+        self._apply_geometry(width, height, alpha)
+
+    def _apply_geometry(self, width: int, height: int, alpha: float):
         work = work_area_rect() or (0, 0, self.winfo_screenwidth(), self.winfo_screenheight())
         x, y = corner_position(work, (width, height), CORNER, SCREEN_MARGIN)
         self.geometry(f"{width}x{height}+{x}+{y}")
@@ -329,7 +339,7 @@ class UsageApp(ctk.CTk):
             w = round(interpolate(start_w, target_w, t))
             h = round(interpolate(start_h, target_h, t))
             alpha = interpolate(start_alpha, target_alpha, t)
-            self._snap_to(w, h, alpha)
+            self._apply_geometry(w, h, alpha)
             if i + 1 < len(frames):
                 self.after(step_delay, lambda: step(i + 1))
 
