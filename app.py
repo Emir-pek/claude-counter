@@ -461,9 +461,20 @@ class UsageApp(ctk.CTk):
             c.create_oval(cx - r, cy - r, cx + r, cy + r,
                           outline=COLORS["bar_critical"], width=1.5)
         dot_r = DOT_SIZE / 2
+        if glow > 0:
+            # Nabız, noktanın kendi outline'ını kalınlaştırarak değil —
+            # arkasına, gerçek şiddet rengiyle çizilmiş ayrı ve büyüyen bir
+            # halka ("halo") ile gösterilir. Outline arka planla aynı renkte
+            # olsaydı (nokta çapını pulsing width ile büyütmenin eski yolu),
+            # Tk'nin merkezden çizdiği outline'ın dışa taşan yarısı arka
+            # planla görünmez kalır, içe taşan yarısı ise noktanın kendi
+            # dolgusunu yiyip "parlama" yerine "küçülme" izlenimi verirdi.
+            glow_r = dot_r + glow * 3
+            c.create_oval(cx - glow_r, cy - glow_r, cx + glow_r, cy + glow_r,
+                          outline=_BAR_COLOR[self._level], width=1.5)
         c.create_oval(cx - dot_r, cy - dot_r, cx + dot_r, cy + dot_r,
                       fill=_BAR_COLOR[self._level], outline=COLORS["window"],
-                      width=1.5 + glow * 2.0)
+                      width=1.5)
 
     def _update_dot(self):
         was_critical = self._ring_after is not None

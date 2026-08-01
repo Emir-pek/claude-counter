@@ -25,7 +25,30 @@ def test_dot_has_one_canvas_item_when_calm(widget):
 
 
 def test_dot_gets_a_second_item_for_the_ring(widget):
+    # glow=0 burada: yalnızca halkanın kendi öğesini eklediğini sınıyoruz,
+    # glow halosunun eklediği üçüncü öğeyle karışmasın.
+    widget._redraw_dot(ring_scale=1.2, ring_visible=True, glow=0.0)
+    try:
+        assert len(widget.dot_canvas.find_all()) == 2
+    finally:
+        widget._level = GREEN
+        widget._redraw_dot()
+
+
+def test_dot_gets_a_third_item_for_the_glow_halo(widget):
+    # Ring + glow halosu + nokta = 3 ayrı canvas öğesi. Halo, noktanın kendi
+    # outline'ını kalınlaştırmak yerine arkasına ayrı bir oval çizer (bkz.
+    # _redraw_dot) — bu yüzden glow > 0 iken öğe sayısı 2 değil 3 olmalı.
     widget._redraw_dot(ring_scale=1.2, ring_visible=True, glow=0.5)
+    try:
+        assert len(widget.dot_canvas.find_all()) == 3
+    finally:
+        widget._level = GREEN
+        widget._redraw_dot()
+
+
+def test_glow_halo_alone_adds_one_item_without_the_ring(widget):
+    widget._redraw_dot(glow=0.5)
     try:
         assert len(widget.dot_canvas.find_all()) == 2
     finally:
