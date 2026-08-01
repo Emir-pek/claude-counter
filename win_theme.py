@@ -78,3 +78,38 @@ def frame_hwnd(widget) -> int:
     child = widget.winfo_id()
     parent = ctypes.windll.user32.GetParent(child)
     return parent or child
+
+
+def _win32_work_area():
+    import ctypes
+    from ctypes import wintypes
+
+    SPI_GETWORKAREA = 0x0030
+
+    class RECT(ctypes.Structure):
+        _fields_ = [("left", wintypes.LONG), ("top", wintypes.LONG),
+                    ("right", wintypes.LONG), ("bottom", wintypes.LONG)]
+
+    user32 = ctypes.windll.user32
+    user32.SystemParametersInfoW.argtypes = [
+        wintypes.UINT, wintypes.UINT, ctypes.c_void_p, wintypes.UINT
+    ]
+    rect = RECT()
+    ok = user32.SystemParametersInfoW(SPI_GETWORKAREA, 0, ctypes.byref(rect), 0)
+    if not ok:
+        return None
+    return (rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top)
+
+
+def work_area_rect(getter=None):
+    """Görev çubuğu hariç çalışma alanı: (x, y, genişlik, yükseklik).
+
+    Win32 çağrısı yoksa ya da başarısız olursa None döner; çağıran taraf ham
+    ekran dikdörtgenine düşmekle yükümlü — crab_overlay.frame_rect'teki
+    win32-yoksa-düş kalıbının aynısı.
+    """
+    getter = getter or _win32_work_area
+    try:
+        return getter()
+    except Exception:
+        return None

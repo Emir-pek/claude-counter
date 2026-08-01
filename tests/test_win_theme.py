@@ -88,3 +88,25 @@ def test_one_failure_makes_the_whole_call_false_but_others_still_tried():
     result = apply_titlebar_theme(1, caption="#C25F42", text="#FFFFFF", setter=flaky)
     assert result is False
     assert calls == [DWMWA_CAPTION_COLOR, DWMWA_TEXT_COLOR]
+
+
+import win_theme
+
+
+def test_work_area_rect_returns_the_getter_result():
+    assert win_theme.work_area_rect(getter=lambda: (0, 0, 1920, 1032)) == (0, 0, 1920, 1032)
+
+
+def test_work_area_rect_swallows_failure():
+    def boom():
+        raise OSError("SPI yok")
+    assert win_theme.work_area_rect(getter=boom) is None
+
+
+def test_work_area_rect_uses_real_win32_by_default():
+    # Bu makinede calisma alani gercekten okunabiliyor (plan hazirlanirken
+    # dogrulandi); regresyonu yakalar.
+    rect = win_theme.work_area_rect()
+    assert rect is not None
+    x, y, w, h = rect
+    assert w > 0 and h > 0
