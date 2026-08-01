@@ -315,6 +315,7 @@ class UsageApp(ctk.CTk):
             self.on_refresh()
 
     def _on_close_click(self, _event=None):
+        self._hovered = False  # gizliyken hover durumu anlamsız
         self.withdraw()
         self.reopen_tab.show()
 
@@ -419,6 +420,12 @@ class UsageApp(ctk.CTk):
         step(0)
 
     def _poll_hover_once(self):
+        if not self.winfo_ismapped():
+            # Kart gizliyken (withdraw sonrası) eski dikdörtgene karşı
+            # yoklama yapmanın anlamı yok — hem gereksiz tween adımları
+            # animasyonlanır hem de reopen sekmesinin üstündeki imleç
+            # hâlâ "kartın üstünde" gibi okunup hover durumunu bozar.
+            return
         try:
             px, py = self.winfo_pointerxy()
             rect = (self.winfo_rootx(), self.winfo_rooty(),

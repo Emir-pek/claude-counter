@@ -208,6 +208,56 @@ def test_reopen_restores_the_idle_card(widget):
     assert widget._expanded is False
 
 
+def test_hover_state_resets_after_close_and_reopen(widget):
+    # Regresyon: kart hover'lıyken ✕'e tıklanıp yeniden açıldığında,
+    # imleç kartın üstünde kalmaya devam etse bile kart genişlemeliydi.
+    # Önceden _on_close_click/reopen() self._hovered'ı sıfırlamıyordu; bu
+    # yüzden bir sonraki _poll_hover_once çağrısı "hovered == self._hovered"
+    # görüp geçiş algılamıyor, kart idle opaklıkta takılı kalıyordu.
+    widget._set_expanded(False, animate=False)
+    original = widget.winfo_pointerxy
+    x, y = widget.winfo_rootx(), widget.winfo_rooty()
+    widget.winfo_pointerxy = lambda: (x + 5, y + 5)  # kartın içi
+    try:
+        widget._poll_hover_once()
+        assert widget._hovered is True
+        assert widget._expanded is True
+
+        widget._on_close_click()
+        assert widget._hovered is False  # kapanışta sıfırlanmalı
+
+        widget.reopen()
+        assert widget._expanded is False
+
+        # İmleç hâlâ (yeniden açılmış) kartın üstünde — sabit kalmamalı.
+        widget._poll_hover_once()
+        assert widget._expanded is True
+    finally:
+        widget.winfo_pointerxy = original
+        widget._set_expanded(False, animate=False)
+        if widget.state() == "withdrawn":
+            widget.reopen()
+
+
+def test_poll_hover_does_nothing_while_the_card_is_hidden(widget):
+    # winfo_ismapped() koruması: kart withdraw'lıyken poll hiçbir şey
+    # yapmamalı (ne hover durumunu değiştirmeli ne de görünmez pencereyi
+    # animasyonlamalı).
+    widget._set_expanded(False, animate=False)
+    widget._hovered = True
+    original = widget.winfo_pointerxy
+    widget.winfo_pointerxy = lambda: (-500, -500)
+    try:
+        widget.withdraw()
+        widget._poll_hover_once()
+        assert widget._hovered is True  # değişmedi: poll hiç çalışmadı
+    finally:
+        widget.winfo_pointerxy = original
+        widget.deiconify()
+        widget._hovered = False
+        widget._set_expanded(False, animate=False)
+
+
 def test_reopen_tab_quit_menu_calls_quit_app(widget, monkeypatch):
     called = []
     monkeypatch.setattr(widget, "quit_app", lambda: called.append(True))
