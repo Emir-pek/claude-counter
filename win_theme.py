@@ -113,3 +113,38 @@ def work_area_rect(getter=None):
         return getter()
     except Exception:
         return None
+
+
+def _win32_set_region(hwnd: int, width: int, height: int, radius: int) -> bool:
+    import ctypes
+    from ctypes import wintypes
+
+    gdi32 = ctypes.windll.gdi32
+    user32 = ctypes.windll.user32
+    gdi32.CreateRoundRectRgn.argtypes = [ctypes.c_int] * 6
+    gdi32.CreateRoundRectRgn.restype = ctypes.c_void_p
+    user32.SetWindowRgn.argtypes = [wintypes.HWND, ctypes.c_void_p, wintypes.BOOL]
+    user32.SetWindowRgn.restype = ctypes.c_int
+
+    diameter = radius * 2
+    hrgn = gdi32.CreateRoundRectRgn(0, 0, width, height, diameter, diameter)
+    if not hrgn:
+        return False
+    return bool(user32.SetWindowRgn(wintypes.HWND(hwnd), hrgn, True))
+
+
+def set_rounded_region(hwnd: int, width: int, height: int, radius: int,
+                       setter=None) -> bool:
+    """Pencereyi yuvarlak köşeli bir bölgeye kırpar. Hiçbir istisna sızdırmaz.
+
+    Bölge kırpma başarısız olursa pencere dikdörtgen köşelerle açılmaya devam
+    etmeli, uygulamayı çökertmemeli — apply_titlebar_theme'deki yutma
+    kalıbının aynısı. -transparentcolor yerine gerçek Win32 bölge kırpma
+    kullanılıyor: CTk'nin kendi yuvarlak-köşe blend'i saydam renk anahtarına
+    karşı magenta sızıntısı üretirdi.
+    """
+    setter = setter or _win32_set_region
+    try:
+        return bool(setter(hwnd, width, height, radius))
+    except Exception:
+        return False

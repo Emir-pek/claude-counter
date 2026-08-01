@@ -110,3 +110,24 @@ def test_work_area_rect_uses_real_win32_by_default():
     assert rect is not None
     x, y, w, h = rect
     assert w > 0 and h > 0
+
+
+def test_set_rounded_region_calls_setter_with_dimensions():
+    calls = []
+
+    def setter(hwnd, width, height, radius):
+        calls.append((hwnd, width, height, radius))
+        return True
+
+    assert win_theme.set_rounded_region(1, 148, 52, 14, setter=setter) is True
+    assert calls == [(1, 148, 52, 14)]
+
+
+def test_set_rounded_region_swallows_failure():
+    def boom(hwnd, width, height, radius):
+        raise OSError("gdi32 yok")
+    assert win_theme.set_rounded_region(1, 148, 52, 14, setter=boom) is False
+
+
+def test_set_rounded_region_reports_setter_false():
+    assert win_theme.set_rounded_region(1, 148, 52, 14, setter=lambda *a: False) is False
