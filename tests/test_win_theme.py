@@ -131,3 +131,48 @@ def test_set_rounded_region_swallows_failure():
 
 def test_set_rounded_region_reports_setter_false():
     assert win_theme.set_rounded_region(1, 148, 52, 14, setter=lambda *a: False) is False
+
+
+def test_begin_high_res_timer_calls_setter_with_ms():
+    calls = []
+
+    def setter(ms):
+        calls.append(ms)
+        return True
+
+    assert win_theme.begin_high_res_timer(1, setter=setter) is True
+    assert calls == [1]
+
+
+def test_begin_high_res_timer_swallows_failure():
+    def boom(ms):
+        raise OSError("winmm yok")
+    assert win_theme.begin_high_res_timer(1, setter=boom) is False
+
+
+def test_begin_high_res_timer_reports_setter_false():
+    assert win_theme.begin_high_res_timer(1, setter=lambda ms: False) is False
+
+
+def test_end_high_res_timer_calls_setter_with_ms():
+    calls = []
+
+    def setter(ms):
+        calls.append(ms)
+        return True
+
+    assert win_theme.end_high_res_timer(1, setter=setter) is True
+    assert calls == [1]
+
+
+def test_end_high_res_timer_swallows_failure():
+    def boom(ms):
+        raise OSError("winmm yok")
+    assert win_theme.end_high_res_timer(1, setter=boom) is False
+
+
+def test_begin_high_res_timer_uses_real_winmm_by_default():
+    # Bu makinede gerçekten çağrılabiliyor mu diye regresyon: eşleşen
+    # end_high_res_timer ile hemen bırakılıyor, süreç genelinde açık kalmasın.
+    assert win_theme.begin_high_res_timer(1) is True
+    assert win_theme.end_high_res_timer(1) is True

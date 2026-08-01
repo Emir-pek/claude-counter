@@ -115,6 +115,55 @@ def work_area_rect(getter=None):
         return None
 
 
+def _win32_time_begin_period(ms: int) -> bool:
+    import ctypes
+    from ctypes import wintypes
+
+    winmm = ctypes.windll.winmm
+    winmm.timeBeginPeriod.argtypes = [wintypes.UINT]
+    winmm.timeBeginPeriod.restype = wintypes.UINT
+    return winmm.timeBeginPeriod(ms) == 0  # TIMERR_NOERROR
+
+
+def begin_high_res_timer(ms: int = 1, setter=None) -> bool:
+    """Sistem zamanlayıcı çözünürlüğünü `ms` milisaniyeye yükseltir.
+
+    Windows'un varsayılan zamanlayıcı çözünürlüğü genelde ~15.6ms'dir; bu,
+    `after(10, ...)` gibi kısa gecikmelerin gerçekte istenenden çok daha geç
+    (ölçülen: ~16-20ms) tetiklenmesine yol açar — tween animasyonunun neden
+    "yavaş hissettirdiği"nin bir parçası. Çağrı süreç geneli olduğundan
+    quit_app()'te eşleşen end_high_res_timer() ile bırakılmalı — aksi halde
+    yükseltilmiş çözünürlük süreç kapanana kadar (gücü/CPU uyanmasını
+    küçük ama gerçek bir maliyetle etkileyerek) açık kalır. Diğer win32
+    sarmalayıcıları gibi hiçbir istisna sızdırmaz: başarısızlık animasyonu
+    engellememeli, sadece nominal hıza düşürmeli.
+    """
+    setter = setter or _win32_time_begin_period
+    try:
+        return bool(setter(ms))
+    except Exception:
+        return False
+
+
+def _win32_time_end_period(ms: int) -> bool:
+    import ctypes
+    from ctypes import wintypes
+
+    winmm = ctypes.windll.winmm
+    winmm.timeEndPeriod.argtypes = [wintypes.UINT]
+    winmm.timeEndPeriod.restype = wintypes.UINT
+    return winmm.timeEndPeriod(ms) == 0  # TIMERR_NOERROR
+
+
+def end_high_res_timer(ms: int = 1, setter=None) -> bool:
+    """begin_high_res_timer()'ın eşleşen bırakma çağrısı. Bkz. oradaki not."""
+    setter = setter or _win32_time_end_period
+    try:
+        return bool(setter(ms))
+    except Exception:
+        return False
+
+
 def _win32_set_region(hwnd: int, width: int, height: int, radius: int) -> bool:
     import ctypes
     from ctypes import wintypes

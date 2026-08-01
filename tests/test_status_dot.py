@@ -84,6 +84,18 @@ def test_update_dot_stops_the_ring_timer_when_no_longer_critical(widget):
     assert widget._ring_after is None
 
 
+def test_dot_canvas_lives_in_a_separate_toplevel_from_the_card(widget):
+    # Kök nedeni bu: nokta artık kartın ÇOCUĞU değil. Kartın kendi
+    # penceresi win_theme.set_rounded_region ile yuvarlak köşeli bir Win32
+    # bölgeye kırpılıyor, çocuk widget'lar bu kırpmanın asla dışına
+    # taşamaz. dot_canvas'ın winfo_toplevel()'i artık kartın kendisi (widget)
+    # değil, ayrı bir DotOverlay Toplevel'i olmalı.
+    assert isinstance(widget.dot_overlay, app_module.DotOverlay)
+    assert widget.dot_canvas is widget.dot_overlay.canvas
+    assert widget.dot_canvas.winfo_toplevel() is widget.dot_overlay
+    assert widget.dot_canvas.winfo_toplevel() is not widget
+
+
 def test_render_with_high_utilization_wires_up_the_ring_end_to_end(widget):
     # render() -> worst_color -> _level -> _update_dot -> ring zincirinin
     # her parçası ayrı ayrı sınanıyordu (worst_color izole, _update_dot
@@ -103,3 +115,154 @@ def test_render_with_high_utilization_wires_up_the_ring_end_to_end(widget):
         _stop_ring(widget)
         widget._level = GREEN
         widget._redraw_dot()
+
+
+# --------------------------------------------------------------------------
+# DotOverlay geometrisi — gerçek ekran koordinatlarına karşı, görsel olarak
+# doğrulanamayan (bu ortamda göremiyoruz) ama geometrik bir gerçek olarak
+# doğrulanabilen bir iddia: "overlay çoğunlukla kartın kendi dikdörtgeninin
+# DIŞINDA duruyor mu?" — test_app_row.py'nin work_area_rect sahtesi kalıbının
+# aynısı: pencere gerçekten haritalı kalıyor (withdraw sonrası
+# overrideredirect pencereler yeniden boyutlanmıyor), kullanıcı hiçbir zaman
+# gerçek bir pencere görmüyor çünkü sahte çalışma alanı ekranın çok dışında.
+# --------------------------------------------------------------------------
+
+@pytest.fixture(scope="module")
+def geo_widget():
+    # NOT: test_app_row.py'nin kullandığı 100_000 ofseti burada
+    # kullanılmadı — Windows'ta Tk'nin winfo_rootx()/rooty() döndürdüğü
+    # koordinatlar imzalı 16 bit'e sığıyor (±32767); 100_000 gibi bir
+    # değer bu sınırı aşıp 32767'ye kenetleniyor ve pozisyon ölçümlerini
+    # anlamsız kılıyor (bu dosyadaki geometrik testler gerçek piksel
+    # konumlarını karşılaştırıyor, yalnızca genişlik değil). 9000 hem bu
+    # sınırın hem de gerçekçi ekran çözünürlüklerinin (çok monitörlü
+    # kurulumlar dahil, tipik olarak birkaç bin piksel) rahatça altında
+    # kalıyor.
+    original_work_area_rect = app_module.work_area_rect
+    app_module.work_area_rect = lambda: (9000, 9000, 400, 300)
+    w = app_module.UsageApp()
+    w.update()
+    try:
+        yield w
+    finally:
+        w.destroy()
+        app_module.work_area_rect = original_work_area_rect
+
+
+def _rect_overlap_area(a, b):
+    ax, ay, aw, ah = a
+    bx, by, bw, bh = b
+    ix = max(0, min(ax + aw, bx + bw) - max(ax, bx))
+    iy = max(0, min(ay + ah, by + bh) - max(ay, by))
+    return ix * iy
+
+
+def _card_rect(widget):
+    return (widget.winfo_rootx(), widget.winfo_rooty(),
+            widget.winfo_width(), widget.winfo_height())
+
+
+def _overlay_rect(widget):
+    ov = widget.dot_overlay
+    return (ov.winfo_rootx(), ov.winfo_rooty(),
+            ov.winfo_width(), ov.winfo_height())
+
+
+def test_dot_overlay_sits_mostly_outside_the_idle_cards_rect(geo_widget):
+    geo_widget._set_expanded(False, animate=False)
+    geo_widget.update()
+    card = _card_rect(geo_widget)
+    overlay = _overlay_rect(geo_widget)
+
+    overlap = _rect_overlap_area(card, overlay)
+    overlay_area = overlay[2] * overlay[3]
+    assert overlay_area > 0
+    outside_fraction = 1.0 - (overlap / overlay_area)
+
+    # Eski (kartın çocuğu olan) tasarımda overlay TAMAMEN kartın içindeydi
+    # (outside_fraction == 0). Yeni tasarımda çoğunlukla dışında olmalı.
+    assert outside_fraction > 0.5, (
+        f"overlay {overlay} kartın {card} içine gömülü kalmış "
+        f"(yalnızca %{outside_fraction*100:.1f} dışarıda)"
+    )
+
+    # Overlay'in kendisi kartın sağ kenarının sağına VE üst kenarının
+    # üstüne taşıyor olmalı — yalnızca "çoğunlukla dışarıda" değil,
+    # gerçekten her iki eksende de kenarları aşıyor.
+    card_x, card_y, card_w, card_h = card
+    overlay_x, overlay_y, overlay_w, overlay_h = overlay
+    assert overlay_x + overlay_w > card_x + card_w, "overlay sağ kenarı aşmıyor"
+    assert overlay_y < card_y, "overlay üst kenarı aşmıyor"
+
+
+def test_dot_overlay_tracks_the_card_when_it_expands(geo_widget):
+    geo_widget._set_expanded(False, animate=False)
+    geo_widget.update()
+    idle_overlay = _overlay_rect(geo_widget)
+
+    geo_widget._set_expanded(True, animate=False)
+    geo_widget.update()
+    try:
+        expanded_overlay = _overlay_rect(geo_widget)
+        expanded_card = _card_rect(geo_widget)
+
+        # Kart genişleyince sağ kenarı sağa kayar (bkz. corner_position:
+        # sağ-alt köşeye sabitli, kart genişledikçe sol kenar sola açılır,
+        # sağ kenar sabit KALMAZ çünkü genişlik CARD_W_IDLE -> CARD_W_EXPANDED
+        # değişir ama x hep work_area'nın sağ kenarına göre yeniden
+        # hesaplanır) — asıl doğrulanması gereken, overlay'in duruk kalmayıp
+        # kartla birlikte gerçekten hareket ettiği.
+        assert expanded_overlay != idle_overlay, "overlay kart genişlerken sabit kaldı"
+
+        overlap = _rect_overlap_area(expanded_card, expanded_overlay)
+        overlay_area = expanded_overlay[2] * expanded_overlay[3]
+        outside_fraction = 1.0 - (overlap / overlay_area)
+        assert outside_fraction > 0.5
+    finally:
+        geo_widget._set_expanded(False, animate=False)
+        geo_widget.update()
+
+
+def test_close_hides_the_dot_overlay(geo_widget):
+    geo_widget._set_expanded(False, animate=False)
+    geo_widget.update()
+    try:
+        geo_widget._on_close_click()
+        assert geo_widget.dot_overlay.state() == "withdrawn"
+    finally:
+        geo_widget.reopen()
+        geo_widget.update()
+
+
+def test_reopen_shows_the_dot_overlay_again(geo_widget):
+    geo_widget._on_close_click()
+    assert geo_widget.dot_overlay.state() == "withdrawn"
+    geo_widget.reopen()
+    geo_widget.update()
+    try:
+        assert geo_widget.dot_overlay.state() != "withdrawn"
+    finally:
+        geo_widget._set_expanded(False, animate=False)
+
+
+def test_a_raw_withdraw_on_the_card_also_hides_the_dot_overlay(geo_widget):
+    # Kök nedeni doğrulanan regresyon: dot_canvas eskiden kartın ÇOCUĞUYDU,
+    # bu yüzden kartın kendi penceresini (self, yani UsageApp/root) doğrudan
+    # .withdraw() ile gizlemek her zaman noktayı da otomatik gizlerdi (Tk
+    # bir pencereyi withdraw ettiğinde çocukları da haritadan kalkar).
+    # dot_overlay artık AYRI bir Toplevel olduğundan, Tk bunu ana pencere
+    # withdraw edildiğinde OTOMATİK gizlemez (crab_overlay.py'nin
+    # <Unmap>/<Map> bağlaması tam olarak bu yüzden var). _on_close_click
+    # DIŞINDA bir yoldan (burada: doğrudan widget.withdraw() çağrısı, tıpkı
+    # bazı test fixture'larının yaptığı gibi) kart gizlenirse bile overlay
+    # ekranda kartsız asılı kalmamalı.
+    geo_widget._set_expanded(False, animate=False)
+    geo_widget.update()
+    try:
+        geo_widget.withdraw()  # _on_close_click'i BİLEREK atlıyor
+        geo_widget.update()
+        assert geo_widget.dot_overlay.state() == "withdrawn"
+    finally:
+        geo_widget.deiconify()
+        geo_widget.update()
+        assert geo_widget.dot_overlay.state() != "withdrawn"

@@ -64,3 +64,36 @@ def glow_phase(elapsed_ms: float, period_ms: float = 1800.0) -> float:
     """CSS pulseGlow yaklaşıklaması: 0..1 nabız yoğunluğu, 50%'de tepe."""
     phase = (elapsed_ms % period_ms) / period_ms
     return 1.0 - abs(phase - 0.5) * 2.0
+
+
+# CSS mockup'ta durum noktası top:-6px;right:-6px ile 148-208px genişlikli
+# bir karta göre konumlanıyordu. Kart genişliği bizim ortamımızda farklı
+# olduğundan literal 6px yerine bu oran kullanılıyor — 6/148, referans
+# mockup'ın idle genişliğine (148px) karşılık gelen kesir.
+DOT_OVERLAY_BIAS_RATIO = 6.0 / 148.0
+
+
+def dot_overlay_center(card_x: float, card_y: float, card_w: float) -> tuple[float, float]:
+    """Kayan durum noktası penceresinin ekran koordinatlarındaki merkezi.
+
+    card_x, card_y, card_w: kartın kendi penceresinin GERÇEK ekran
+    koordinatları (winfo_rootx/rooty/width) — kartın yükseklik bilgisine
+    ihtiyaç yok, nokta yalnızca sağ-üst köşeyle ilgileniyor.
+
+    Neden kartın "keskin" köşesi (card_x + card_w, card_y) referans alınıyor:
+    Win32 SetWindowRgn köşeyi CARD_RADIUS kadar içeri keser, yani kartın
+    GÖRÜNÜR yuvarlatılmış silüeti bu keskin köşe noktasına asla ulaşmaz —
+    silüetin sınırı oradan her zaman en az bir miktar içeride kalır (yarıçap
+    ne olursa olsun, sıfırdan büyük olduğu sürece). Bu yüzden merkezi tam bu
+    keskin köşe noktasına (ya da ondan biraz daha dışına) koymak, DOT_SIZE
+    ya da CARD_RADIUS'un tam değerini bilmeye gerek kalmadan noktanın
+    görünür yuvarlatılmış silüetin tamamen dışında kalacağını garantiler —
+    sabit bir piksel sayısının "yeterli" olup olmadığını tahmin etmek yerine
+    geometrinin kendisinden gelen bir garanti, bu yüzden DPI/ölçeklemeden
+    bağımsız. Üstüne CSS mockup'ın "poke out" görünümünü yeniden üretmek için
+    küçük bir dışa taşma payı ekleniyor (bkz. DOT_OVERLAY_BIAS_RATIO).
+    """
+    bias = card_w * DOT_OVERLAY_BIAS_RATIO
+    cx = card_x + card_w + bias
+    cy = card_y - bias
+    return (cx, cy)

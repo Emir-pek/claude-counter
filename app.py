@@ -7,10 +7,13 @@ from datetime import datetime, timezone
 
 import customtkinter as ctk
 
-from card_geometry import corner_position, glow_phase, interpolate, point_in_rect, ring_phase, tween_frames
+from card_geometry import (corner_position, dot_overlay_center, glow_phase, interpolate,
+                          point_in_rect, ring_phase, tween_frames)
+from crab_overlay import TRANSPARENT_KEY
 from formatting import GREEN, RED, YELLOW, color_for, format_countdown, format_reset_time, worst_color
 from usage_client import UsageData, UsageError
-from win_theme import apply_titlebar_theme, frame_hwnd, set_rounded_region, work_area_rect
+from win_theme import (apply_titlebar_theme, begin_high_res_timer, end_high_res_timer,
+                       frame_hwnd, set_rounded_region, work_area_rect)
 
 ctk.set_appearance_mode("dark")
 
@@ -86,12 +89,27 @@ BAR_H_IDLE = 5
 BAR_H_EXPANDED = 7
 DOT_SIZE = 8
 RING_SIZE = 14
-DOT_CANVAS_SIZE = 28  # was 24 — gives the ring/glow (max radius ~11.9px at peak) room clear of the rounded-corner cutout
+# 32×32: kritik halka en büyük ölçeğinde (RING_SIZE/2*1.7 ≈ 11.9px yarıçap)
+# ve parlama halosuyla (dot_r + glow*3 ≈ 7px yarıçap) birlikte gerçek pay
+# bırakıyor. Artık bir kırpma bölgesinden kaçınmak gerekmiyor (bkz.
+# DotOverlay) — bu kendi bölgesi olmayan, tamamen saydam ayrı bir pencere.
+DOT_CANVAS_SIZE = 32
 REOPEN_SIZE = 34
 
 HOVER_POLL_MS = 50
-TWEEN_MS = 180
-TWEEN_STEPS = 18
+# Ölçüldü (bkz. user-qa-fix-report.md, Task 3): Windows'ta Tk'nin after()
+# zamanlayıcısı — begin_high_res_timer(1) etkin haldeyken bile — adım
+# başına gerçekte ~17-23ms alıyor (Windows'un ~15.6ms zamanlayıcı
+# çözünürlüğü + her adımın kendi win32 iş yükü: geometry()/SetWindowRgn).
+# Eski TWEEN_MS=180/TWEEN_STEPS=18 (adım başına istenen 10ms, bu tabanın
+# ALTINDA) yüzünden gerçek süre ~300ms'ydi — istenen gecikmeyi küçültmenin
+# hiçbir faydası yoktu, çünkü adım sayısı × taban gerçek süreyi belirliyordu.
+# Bu yüzden adım sayısı 5'e indirildi: 5 × ~20-24ms ≈ ölçülen 120-123ms,
+# kullanıcının istediği 120-150ms aralığında — DPI'dan bağımsız, çünkü bu
+# taban Tk'nin kendi zamanlayıcı mekanizmasından ve gerçek win32 işinden
+# geliyor, piksel/font ölçeklemesinden değil.
+TWEEN_MS = 100
+TWEEN_STEPS = 5
 RING_TICK_MS = 60
 
 
@@ -112,8 +130,15 @@ class _Row:
             border_color=COLORS["bar_critical"],
         )
         self.bar.set(0)
+        # width kasıtlı olarak sabitlenmedi (0 = CTkLabel'in "içeriğe göre
+        # boyutlan" değeri): daha önceki sabit width=44 bu ortamda
+        # (widget_scaling=1.0) yetiyordu ama kullanıcının gerçek makinesinde
+        # farklı DPI/font ölçeklemesiyle metni kırpıyordu. Sütun 2'nin
+        # grid_columnconfigure'da weight'i yok (yalnız sütun 1/bar ağırlıklı),
+        # bu yüzden width vermemek etiketi gerçek render edilen fontun gerçek
+        # piksel genişliğine oturtuyor — hangi makinede çalışırsa çalışsın.
         self.pct = ctk.CTkLabel(
-            self.frame, text="", width=44, anchor="e",
+            self.frame, text="", width=0, anchor="e",
             font=("Segoe UI", 11, "bold"), text_color=COLORS["text_secondary"],
         )
         self.label.grid(row=0, column=0, sticky="w")
@@ -237,6 +262,106 @@ class ReopenTab(tk.Toplevel):
         self._menu.tk_popup(event.x_root, event.y_root)
 
 
+class DotOverlay(tk.Toplevel):
+    """Durum noktası/halka/parlama için kartın kendi penceresinden AYRI,
+    saydam, kayan bir pencere.
+
+    Neden ayrı pencere: kart kendi penceresi win_theme.set_rounded_region
+    ile yuvarlak köşeli bir Win32 bölgeye (SetWindowRgn) kırpılıyor.
+    Kartın ÇOCUĞU olan hiçbir widget bu kırpmanın dışına asla taşamaz —
+    "dışarısı" bir çocuk widget için yok, offset ne olursa olsun. Nokta
+    köşeden taşıp gerçekten dışarı görünmesi gerektiğinden (orijinal CSS
+    mockup: top:-6px;right:-6px, kartın kutusunun dışına taşan bir
+    kardeş eleman), crab_overlay.py'deki CrabOverlay ile birebir aynı
+    kalıp izleniyor: -transparentcolor'lı ayrı bir overrideredirect
+    Toplevel, sahibinin geometrisine göre elle senkronlanıyor.
+
+    Kendi zamanlayıcı döngüsü YOK (CrabOverlay'in _move_tick/_walk_tick'inin
+    aksine) — tamamen dışarıdan, UsageApp._apply_geometry çağrıldığında
+    sync() ile itiliyor. Bu kasıtlı: bağımsız bir after() döngüsü,
+    quit_app() sırasında iptal edilmesi unutulabilecek ayrı bir yeniden
+    zamanlanan zamanlayıcı anlamına gelirdi (bu kod tabanının _ring_after
+    ve CrabOverlay._shutdown ile daha önce iki kez çözdüğü sınıf bir hata) —
+    zamanlayıcısız olmak bu hata sınıfını baştan imkânsız kılıyor.
+    """
+
+    def __init__(self, app: "UsageApp"):
+        super().__init__(app)
+        self._app = app
+        # CrabOverlay'deki gibi: Toplevel başlığı ana pencereden miras
+        # alınmasın, dış araçlar iki pencereden yanlışını "asıl pencere"
+        # sanmasın.
+        self.title("")
+        self.overrideredirect(True)
+        self.attributes("-topmost", True)
+        self.attributes("-transparentcolor", TRANSPARENT_KEY)
+        self.configure(bg=TRANSPARENT_KEY)
+
+        self.canvas = tk.Canvas(
+            self, width=DOT_CANVAS_SIZE, height=DOT_CANVAS_SIZE,
+            bg=TRANSPARENT_KEY, highlightthickness=0, bd=0,
+        )
+        self.canvas.pack(fill="both", expand=True)
+
+        # _on_close_click/reopen() kartın kendi withdraw/deiconify'ıyla
+        # birlikte bunu da açıkça çağırıyor (görünürlük değişikliğini
+        # okuyan biri için en dolaysız yer) — ama CrabOverlay'in aynı
+        # sorunu neden <Unmap>/<Map> ile çözdüğünü unutmayalım: ana
+        # pencerenin withdraw()'ı Tk'de ÇOCUK widget'ları otomatik gizler
+        # ama bağımsız bir Toplevel'i (bu overlay gibi) OTOMATİK gizlemez.
+        # Kart .withdraw()'ı _on_close_click DIŞINDA bir yoldan (ör. bir
+        # test fixture'ının doğrudan çağrısı, ileride eklenecek başka bir
+        # kapatma yolu) çağrılırsa, açık withdraw() çağrısı olmadan bu
+        # overlay ekranda kartsız, tek başına asılı kalırdı. Bağlama, aynı
+        # sınıf hatayı CrabOverlay'in çözdüğü gibi kapatıyor: hangi yoldan
+        # gelirse gelsin ana pencerenin gerçek haritalanma durumunu izliyor.
+        self._app.bind("<Unmap>", self._on_app_unmap, add="+")
+        self._app.bind("<Map>", self._on_app_map, add="+")
+
+        self._last_key = None
+        self.sync()
+
+    def _on_app_unmap(self, _event=None):
+        try:
+            self.withdraw()
+        except Exception:
+            pass
+
+    def _on_app_map(self, _event=None):
+        try:
+            self.deiconify()
+        except Exception:
+            pass
+
+    def sync(self):
+        """Kartın GERÇEK ekran konumuna göre kendini yeniden konumlar.
+
+        _apply_geometry'nin her tween adımında ve her snap'te çağrılması
+        bekleniyor — kart genişlerken/daralırken nokta da sorunsuzca onunla
+        birlikte hareket etsin diye. Kart henüz haritalanmamışsa ya da
+        pencere yok edilmişse (destroy sırası, bkz. sınıf docstring'i)
+        sessizce hiçbir şey yapmıyor — diğer win32 sarmalayıcılarıyla aynı
+        yutma kalıbı.
+        """
+        try:
+            card_x = self._app.winfo_rootx()
+            card_y = self._app.winfo_rooty()
+            card_w = self._app.winfo_width()
+        except Exception:
+            return
+        key = (card_x, card_y, card_w)
+        if key == self._last_key:
+            return
+        self._last_key = key
+        cx, cy = dot_overlay_center(card_x, card_y, card_w)
+        x = round(cx - DOT_CANVAS_SIZE / 2)
+        y = round(cy - DOT_CANVAS_SIZE / 2)
+        try:
+            self.geometry(f"{DOT_CANVAS_SIZE}x{DOT_CANVAS_SIZE}+{x}+{y}")
+        except Exception:
+            pass
+
+
 class UsageApp(ctk.CTk):
     def __init__(self):
         super().__init__()
@@ -253,6 +378,10 @@ class UsageApp(ctk.CTk):
         self._status_text = ""
         self._status_color = COLORS["bar_mid"]
         self._ring_after = None
+        # win_theme.begin_high_res_timer'daki nota bak: quit_app()'te
+        # eşleşen end_high_res_timer() ile bırakılmalı, o yüzden başarı
+        # durumu burada tutuluyor.
+        self._timer_res_active = begin_high_res_timer(1)
 
         self.card = ctk.CTkFrame(
             self, corner_radius=CARD_RADIUS, fg_color=COLORS["window"],
@@ -296,11 +425,17 @@ class UsageApp(ctk.CTk):
         self.status_label.grid(row=5, column=0, sticky="ew", padx=10, pady=(4, 8))
         self.status_label.grid_remove()
 
-        self.dot_canvas = tk.Canvas(
-            self.card, width=DOT_CANVAS_SIZE, height=DOT_CANVAS_SIZE,
-            bg=COLORS["window"], highlightthickness=0, bd=0,
-        )
-        self.dot_canvas.place(relx=1.0, rely=0.0, anchor="ne", x=-4, y=4)
+        # Durum noktası artık kartın çocuğu değil — bkz. DotOverlay
+        # docstring'i: kartın kendi penceresi yuvarlak köşeye kırpılıyor,
+        # bir çocuk widget bu kırpmanın dışına asla taşamaz. dot_canvas
+        # burada bilinçli olarak ayrı Toplevel'in canvas'ına bir takma ad
+        # (alias): mevcut kod/testler (tests/test_status_dot.py)
+        # widget.dot_canvas.find_all() gibi doğrudan canvas API'sini
+        # kullanıyor — çizim/zamanlayıcı mantığı (_redraw_dot/_tick_ring)
+        # canvas'ın hangi pencerede yaşadığını bilmeden aynı kalabilsin diye
+        # her çağrı noktasını değiştirmek yerine bu takma ad tutuluyor.
+        self.dot_overlay = DotOverlay(self)
+        self.dot_canvas = self.dot_overlay.canvas
         self._redraw_dot()
 
         set_window_icon(self)
@@ -317,10 +452,14 @@ class UsageApp(ctk.CTk):
     def _on_close_click(self, _event=None):
         self._hovered = False  # gizliyken hover durumu anlamsız
         self.withdraw()
+        # Kart gizlenince onunla kayan noktayı da gizle — aksi halde ayrı
+        # bir pencere olduğu için ekranda kartsız, tek başına asılı kalır.
+        self.dot_overlay.withdraw()
         self.reopen_tab.show()
 
     def reopen(self):
         self.deiconify()
+        self.dot_overlay.deiconify()
         self._set_expanded(False, animate=False)
 
     def quit_app(self):
@@ -335,7 +474,14 @@ class UsageApp(ctk.CTk):
             except Exception:
                 pass
             self._ring_after = None
+        if self._timer_res_active:
+            end_high_res_timer(1)
+            self._timer_res_active = False
         self.reopen_tab.destroy()
+        # DotOverlay'in kendi zamanlayıcı döngüsü yok (bkz. sınıf
+        # docstring'i), bu yüzden _ring_after'ın aksine iptal edilecek
+        # bekleyen bir after() callback'i yok — doğrudan yok edilebilir.
+        self.dot_overlay.destroy()
         self.destroy()
 
     def _set_expanded(self, expanded: bool, animate: bool = True):
@@ -395,6 +541,10 @@ class UsageApp(ctk.CTk):
             set_rounded_region(frame_hwnd(self), width, height, CARD_RADIUS)
         except Exception:
             pass
+        # Nokta, kartın her tween adımında/snap'inde onunla birlikte
+        # kaymalı — bu yüzden her _apply_geometry çağrısında senkronlanıyor,
+        # yalnızca dinlenme durumunda değil.
+        self.dot_overlay.sync()
         self._laid_out = True
 
     def _tween_to(self, target_w: int, target_h: int, target_alpha: float):

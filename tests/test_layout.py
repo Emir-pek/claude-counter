@@ -320,6 +320,44 @@ def test_reopen_tab_quit_menu_calls_quit_app(widget, monkeypatch):
     assert called == [True]
 
 
+def test_quit_app_releases_the_high_res_timer(widget, monkeypatch):
+    # begin_high_res_timer(1) __init__'te çağrılıyor (bkz. TWEEN_MS/TWEEN_STEPS
+    # yorumu); süreç genelinde açık bırakılırsa küçük ama gerçek bir güç/CPU
+    # maliyeti var, bu yüzden quit_app() eşleşen end_high_res_timer ile
+    # bırakmalı. _timer_res_active zaten True olmalı (gerçek __init__'te
+    # başarıyla çağrıldı) — burada yalnızca serbest bırakmanın gerçekleştiğini
+    # doğruluyoruz, gerçek destroy() paylaşılan widget'ı yok etmesin diye
+    # stub'lanıyor.
+    monkeypatch.setattr(widget, "destroy", lambda: None)
+    monkeypatch.setattr(widget.reopen_tab, "destroy", lambda: None)
+    monkeypatch.setattr(widget.dot_overlay, "destroy", lambda: None)
+    calls = []
+    monkeypatch.setattr(app_module, "end_high_res_timer", lambda ms: calls.append(ms) or True)
+    original_active = widget._timer_res_active
+    widget._timer_res_active = True
+    try:
+        widget.quit_app()
+        assert calls == [1]
+        assert widget._timer_res_active is False
+    finally:
+        widget._timer_res_active = original_active
+
+
+def test_quit_app_skips_release_when_timer_was_never_active(widget, monkeypatch):
+    monkeypatch.setattr(widget, "destroy", lambda: None)
+    monkeypatch.setattr(widget.reopen_tab, "destroy", lambda: None)
+    monkeypatch.setattr(widget.dot_overlay, "destroy", lambda: None)
+    calls = []
+    monkeypatch.setattr(app_module, "end_high_res_timer", lambda ms: calls.append(ms) or True)
+    original_active = widget._timer_res_active
+    widget._timer_res_active = False
+    try:
+        widget.quit_app()
+        assert calls == []
+    finally:
+        widget._timer_res_active = original_active
+
+
 def test_quit_app_cancels_a_pending_ring_timer(widget, monkeypatch):
     # Task 7'nin _ring_after zamanlayıcısı, kritik durumdayken kendini
     # yeniden zamanlar (self.after(RING_TICK_MS, ...)). quit_app() ilk defa
@@ -338,6 +376,10 @@ def test_quit_app_cancels_a_pending_ring_timer(widget, monkeypatch):
 
     monkeypatch.setattr(widget, "destroy", _destroy_stub)
     monkeypatch.setattr(widget.reopen_tab, "destroy", lambda: None)
+    monkeypatch.setattr(widget.dot_overlay, "destroy", lambda: None)
+    # Bu testin ilgisi zamanlama sırası, timer çözünürlüğü değil — gerçek
+    # winmm çağrısı gereksiz, diğer testlerden bağımsız kalsın diye stub'landı.
+    monkeypatch.setattr(app_module, "end_high_res_timer", lambda ms: True)
     original_level = widget._level
     try:
         widget._level = app_module.RED
