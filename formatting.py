@@ -50,3 +50,16 @@ def format_reset_time(resets_at: datetime, now: datetime, tz=None) -> str:
     if local_reset.date() == local_now.date():
         return hhmm
     return f"{DAY_NAMES[local_reset.weekday()]} {hhmm}"
+
+
+def worst_color(*utils) -> str:
+    """En kötü seviyenin rengi. None değerler yok sayılır.
+
+    color_for eşik merdiveninde monoton: en yüksek kullanım en kötü seviyeyi
+    verir, ayrı ayrı hesaplanan iki rengin en kötüsünü almakla aynı sonucu
+    üretir.
+    """
+    present = [u for u in utils if u is not None]
+    if not present:
+        return GREEN
+    return color_for(max(present))

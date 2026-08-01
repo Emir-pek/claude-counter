@@ -4,6 +4,7 @@ from formatting import (
     format_countdown,
     format_reset_time,
     color_for,
+    worst_color,
     DAY_NAMES,
     GREEN,
     YELLOW,
@@ -94,3 +95,19 @@ def test_reset_time_uses_system_local_when_tz_omitted():
 
 def test_day_names_are_turkish_and_locale_independent():
     assert DAY_NAMES == ("Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz")
+
+
+def test_worst_color_picks_the_more_severe_window():
+    assert worst_color(22.0, 92.0) == RED
+    assert worst_color(92.0, 22.0) == RED
+    assert worst_color(22.0, 68.0) == YELLOW
+    assert worst_color(22.0, 40.0) == GREEN
+
+
+def test_worst_color_ignores_missing_windows():
+    assert worst_color(None, 68.0) == YELLOW
+    assert worst_color(22.0, None) == GREEN
+
+
+def test_worst_color_defaults_to_safe_before_any_data():
+    assert worst_color(None, None) == GREEN
