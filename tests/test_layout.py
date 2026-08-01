@@ -223,8 +223,15 @@ def test_quit_app_cancels_a_pending_ring_timer(widget, monkeypatch):
     # Gerçek destroy() paylaşılan modül kapsamlı widget'ı (ve bu süreçteki
     # tek Tk yorumlayıcısını) yok edip sonraki testleri/teardown'ı
     # kıracağından burada no-op'a alınıyor; yalnızca zamanlayıcı iptalinin
-    # gerçekleştiğini doğruluyoruz.
-    monkeypatch.setattr(widget, "destroy", lambda: None)
+    # gerçekleştiğini doğruluyoruz. destroy stub'u boş bir no-op olsaydı,
+    # quit_app() iptali destroy'dan SONRA yapacak şekilde yeniden
+    # sıralansa bile test hiçbir şey fark etmezdi — sırayı gerçekten
+    # sınamak için stub, çağrıldığı anda _ring_after'ın zaten None
+    # olduğunu doğruluyor.
+    def _destroy_stub():
+        assert widget._ring_after is None, "quit_app() must cancel the ring timer before destroying"
+
+    monkeypatch.setattr(widget, "destroy", _destroy_stub)
     monkeypatch.setattr(widget.reopen_tab, "destroy", lambda: None)
     original_level = widget._level
     try:
