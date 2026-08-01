@@ -9,8 +9,10 @@ resets.
 
 ![Claude Counter](docs/screenshot.png)
 
-> **Note:** the widget's interface is currently in Turkish
-> (`5 saatlik` = 5-hour, `Haftalık` = weekly, `güncellendi` = updated).
+> **Note:** the widget's interface is currently in Turkish (`5s` = 5-hour,
+> `7g` = weekly). A status line only appears — and only while the card is
+> expanded — when there's something to report: a network error or a
+> rate-limit backoff. Otherwise it stays hidden.
 
 ## Requirements
 
@@ -41,16 +43,22 @@ resets.
 3. The first run creates a local `.venv` and installs customtkinter. It takes a
    few seconds and happens only once — later runs open instantly.
 
-A small pixel-art crab walks around the edge of the window, and it gets
-visibly angrier as your **5-hour** window fills: it scowls, turns red, and
-walks faster. It switches at the same thresholds the bars use, so the crab is
-never calm while the bar is red. The weekly window deliberately does not
-affect its mood. Clicks pass straight through it; if Pillow or the sprite is
-missing it simply does not appear and everything else keeps working.
+Instead of a regular window, the widget is a small borderless card docked to
+a corner of the screen (bottom-right by default, sitting just clear of the
+taskbar). Idle, it shrinks to a small translucent pill showing only the two
+bars and their percentages, so it stays out of the way. Hover over it and it
+expands to show the labels, the refresh and close buttons, and a per-window
+countdown to the next reset; move the mouse off and it shrinks back down.
 
-The widget refreshes every 5 minutes; the **↻** button refreshes it manually.
-The countdowns tick every second on their own, so only the percentages wait for
-the next poll. Close it with the **✕** button.
+The widget refreshes every 5 minutes; the **↻** button (visible while
+expanded) refreshes it manually. The countdowns tick every second on their
+own, so only the percentages wait for the next poll.
+
+The card has no titlebar, no taskbar entry, and no Alt-F4 — clicking **✕**
+does **not** quit the app, it only hides the card into a small reopen tab
+that stays in the same corner. Left-click that tab to bring the card back.
+**To actually quit**, right-click the reopen tab and choose **Çıkış** ("exit")
+from the menu that appears.
 
 To start it automatically with Windows, press `Win+R`, run `shell:startup`, and
 put a shortcut to `baslat.bat` in the folder that opens.
@@ -93,9 +101,16 @@ Run from source without the launcher: `pythonw main.py`
 
 Layout: `main.py` wires everything together, `scheduling.py` decides when the
 next poll happens (interval, backoff, one-request-at-a-time), `app.py` is the
-CustomTkinter window, `usage_client.py` the fetch and parse layer,
-`formatting.py` the countdown and color rules, `win_theme.py` the Windows 11
-titlebar tint, `crab_overlay.py` the decorative crab.
+CustomTkinter card (window construction, corner docking, hover expand/collapse,
+status dot/ring), `usage_client.py` the fetch and parse layer, `formatting.py`
+the countdown and color rules, `win_theme.py` the Windows-specific helpers
+(rounded window regions, work-area rect, DWM titlebar tinting — unused now
+that the card has no native titlebar, kept because it's still generically
+useful and covered by its own tests), `card_geometry.py` the pure corner/tween
+math behind the docking and hover animations. `crab_overlay.py` is a
+decorative pixel-art crab mascot that shipped in an earlier version of the
+widget; it still works and is still tested, but `main.py` no longer installs
+it, so it is not part of the running app today.
 
 The window icon is generated, not hand-drawn: `python -m tools.gen_icon`
 rewrites `assets/claude_counter.ico` using nothing but the standard library.
