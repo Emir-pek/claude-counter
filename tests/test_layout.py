@@ -86,6 +86,21 @@ def test_rate_limited_error_uses_the_spec_copy(widget):
     assert widget._status_color == app_module.COLORS["bar_mid"]
 
 
+def test_rate_limited_error_shows_when_expanded(widget):
+    # Yalnızca "gizli" hâl daha önce sınanıyordu; burada satırın gerçekten
+    # görünür olduğu hâli — genişkenki metin/renk dahil — doğruluyoruz.
+    widget.render_error(UsageError("rate_limited", "429"))
+    widget._set_expanded(True, animate=False)
+    try:
+        assert widget.status_label.grid_info() != {}
+        assert widget.status_label.cget("text") == "Sınıra takıldı — yeniden deneniyor"
+        assert widget.status_label.cget("text_color") == app_module.COLORS["bar_mid"]
+    finally:
+        widget._set_expanded(False, animate=False)
+        widget._status_text = ""
+        widget._refresh_status_visibility()
+
+
 def test_render_clears_the_status_line(widget):
     widget.render_error(UsageError("network", "hata"))
     _fill(widget)
@@ -103,6 +118,20 @@ def test_snap_to_survives_a_win32_failure(widget, monkeypatch):
 
     monkeypatch.setattr(app_module, "frame_hwnd", _boom)
     widget._snap_to(app_module.CARD_W_IDLE, 100, app_module.IDLE_OPACITY)
+
+
+def test_reopen_tab_show_survives_a_win32_failure(widget, monkeypatch):
+    # Kartın _apply_geometry'sindeki aynı korumanın simetriği: reopen
+    # sekmesi de kendi rounded-region çağrısı başarısız olduğunda
+    # patlamamalı (bkz. ReopenTab.show()'daki try/except).
+    def _boom(_window):
+        raise OSError("GetParent failed")
+
+    monkeypatch.setattr(app_module, "frame_hwnd", _boom)
+    try:
+        widget.reopen_tab.show()
+    finally:
+        widget.reopen_tab.withdraw()
 
 
 def test_expanding_reveals_header_and_countdowns(widget):
@@ -152,6 +181,32 @@ def test_poll_hover_collapses_when_pointer_leaves(widget):
         assert widget._expanded is False
     finally:
         widget.winfo_pointerxy = original
+        widget._set_expanded(False, animate=False)
+
+
+def test_poll_hover_only_toggles_alpha_when_expand_on_hover_is_off(widget, monkeypatch):
+    # EXPAND_ON_HOVER = False gerçek, belgelenmiş bir ayar sabiti ama daha
+    # önce hiçbir test onun alpha-only dalını çalıştırmıyordu.
+    monkeypatch.setattr(app_module, "EXPAND_ON_HOVER", False)
+    widget._set_expanded(False, animate=False)
+    widget._hovered = False
+    original = widget.winfo_pointerxy
+    x, y = widget.winfo_rootx(), widget.winfo_rooty()
+    try:
+        widget.winfo_pointerxy = lambda: (x + 5, y + 5)  # kartın içi
+        widget._poll_hover_once()
+        assert widget._hovered is True
+        assert widget._expanded is False  # genişleme YOK, sadece opaklık
+        assert widget.attributes("-alpha") == pytest.approx(1.0)
+
+        widget.winfo_pointerxy = lambda: (-500, -500)  # kartın dışı
+        widget._poll_hover_once()
+        assert widget._hovered is False
+        assert widget._expanded is False
+        assert widget.attributes("-alpha") == pytest.approx(app_module.IDLE_OPACITY)
+    finally:
+        widget.winfo_pointerxy = original
+        widget._hovered = False
         widget._set_expanded(False, animate=False)
 
 

@@ -1,7 +1,10 @@
+from datetime import datetime, timedelta, timezone
+
 import pytest
 
 import app as app_module
 from formatting import GREEN, RED
+from usage_client import UsageData, Window
 
 
 @pytest.fixture(scope="module")
@@ -79,3 +82,24 @@ def test_update_dot_stops_the_ring_timer_when_no_longer_critical(widget):
     widget._level = GREEN
     widget._update_dot()
     assert widget._ring_after is None
+
+
+def test_render_with_high_utilization_wires_up_the_ring_end_to_end(widget):
+    # render() -> worst_color -> _level -> _update_dot -> ring zincirinin
+    # her parçası ayrı ayrı sınanıyordu (worst_color izole, _update_dot
+    # elle atanmış _level ile); gerçek render() ile uçtan uca çalıştığını
+    # doğrulayan hiçbir test yoktu.
+    now = datetime.now(timezone.utc)
+    data = UsageData(
+        five_hour=Window(utilization=90.0, resets_at=now + timedelta(hours=1)),
+        seven_day=Window(utilization=10.0, resets_at=now + timedelta(days=6)),
+        fetched_at=now,
+    )
+    try:
+        widget.render(data)
+        assert widget._level == RED
+        assert widget._ring_after is not None
+    finally:
+        _stop_ring(widget)
+        widget._level = GREEN
+        widget._redraw_dot()
