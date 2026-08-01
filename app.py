@@ -97,19 +97,31 @@ DOT_CANVAS_SIZE = 32
 REOPEN_SIZE = 34
 
 HOVER_POLL_MS = 50
-# Ölçüldü (bkz. user-qa-fix-report.md, Task 3): Windows'ta Tk'nin after()
-# zamanlayıcısı — begin_high_res_timer(1) etkin haldeyken bile — adım
-# başına gerçekte ~17-23ms alıyor (Windows'un ~15.6ms zamanlayıcı
-# çözünürlüğü + her adımın kendi win32 iş yükü: geometry()/SetWindowRgn).
-# Eski TWEEN_MS=180/TWEEN_STEPS=18 (adım başına istenen 10ms, bu tabanın
-# ALTINDA) yüzünden gerçek süre ~300ms'ydi — istenen gecikmeyi küçültmenin
-# hiçbir faydası yoktu, çünkü adım sayısı × taban gerçek süreyi belirliyordu.
-# Bu yüzden adım sayısı 5'e indirildi: 5 × ~20-24ms ≈ ölçülen 120-123ms,
-# kullanıcının istediği 120-150ms aralığında — DPI'dan bağımsız, çünkü bu
-# taban Tk'nin kendi zamanlayıcı mekanizmasından ve gerçek win32 işinden
-# geliyor, piksel/font ölçeklemesinden değil.
-TWEEN_MS = 100
-TWEEN_STEPS = 5
+# DÜZELTME (bkz. user-qa-fix-report.md, Finding 3): önceki yorum burada bir
+# ~15.6ms Windows zamanlayıcı-çözünürlüğü tabanı olduğunu iddia ediyordu —
+# bu iddia yanlış çıktı. Ham after(N), begin_high_res_timer(1) açıkken de
+# kapalıyken de istenen N'e ~0.01ms hassasiyetle uyuyor; sabit bir 15.6ms
+# tabanı yok. Adım başına gerçek maliyetin asıl kaynağı zamanlayıcı
+# çözünürlüğü değil, her adımın kendi Tk/Win32 işi — _apply_geometry'nin
+# çağırdığı update_idletasks() ve set_rounded_region() (SetWindowRgn).
+# Bu ortamda uçtan uca gerçek bir tween'i ölçmek (bu dosyanın testlerinden
+# ayrı, elle sürülmüş bir UsageApp() üzerinde) bu win32 işinin, istenen
+# adım gecikmesinden bağımsız olarak, adım başına ~14-16ms sabit gider
+# eklediğini gösterdi — bu yüzden istenen gecikmeyi küçültmenin faydası
+# sınırlı, çünkü STEPS × bu sabit gider toplam süreyi domine ediyor.
+# TWEEN_STEPS=5 bu yüzden fazla düzeltilmişti: ease_out_cubic en dik t=0
+# civarında olduğundan, 5 tekdüze adımla İLK karenin kendisi toplam
+# mesafenin %48.8'ini kat ediyordu — tween 2-3 karelik bir sıçrama gibi
+# okunuyordu, pürüzsüz bir animasyon değil. TWEEN_STEPS=10 iki katı kare
+# sayısı veriyor; TWEEN_MS=40 bu ortamda ölçülen ~145-149ms gerçek uçtan
+# uca süreyle istenen 120-150ms aralığına giriyor (bkz. scratchpad
+# ölçümleri, user-qa-fix-report.md). timeBeginPeriod/timeEndPeriod
+# çağrıları (begin_high_res_timer/end_high_res_timer) yine de tutuluyor —
+# ölçülen bir sorunu çözdükleri için değil, after()-tabanlı animasyon için
+# standart savunmacı pratik olduğu ve ölçülen hiçbir zararları olmadığı
+# için.
+TWEEN_MS = 40
+TWEEN_STEPS = 10
 RING_TICK_MS = 60
 
 
@@ -321,13 +333,27 @@ class DotOverlay(tk.Toplevel):
         self._last_key = None
         self.sync()
 
-    def _on_app_unmap(self, _event=None):
+    def _on_app_unmap(self, event=None):
+        # bind() bir widget'a değil, o widget'ın bindtag'ine kurulur —
+        # <Unmap>/<Map> yalnızca ana pencere haritadan kalktığında/haritaya
+        # döndüğünde değil, HERHANGİ bir torun widget haritadan
+        # kalktığında/döndüğünde de aynı bindtag üzerinden ateşlenir. Örneğin
+        # _Row.set_expanded(False) -> countdown.grid_remove() bir çocuğu
+        # haritadan kaldırır ve bu da event.widget'ı o countdown etiketi
+        # olan bir <Unmap> tetikler; guard olmadan bu, kart hâlâ tamamen
+        # görünürken overlay'i idle'a her dönüşte withdraw ederdi (bkz.
+        # user-qa-fix-report.md Finding 1). event.widget'ın gerçekten
+        # ana pencerenin kendisi olduğunu doğrulamadan tepki vermemeliyiz.
+        if event is not None and event.widget is not self._app:
+            return
         try:
             self.withdraw()
         except Exception:
             pass
 
-    def _on_app_map(self, _event=None):
+    def _on_app_map(self, event=None):
+        if event is not None and event.widget is not self._app:
+            return
         try:
             self.deiconify()
         except Exception:

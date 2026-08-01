@@ -66,11 +66,21 @@ def glow_phase(elapsed_ms: float, period_ms: float = 1800.0) -> float:
     return 1.0 - abs(phase - 0.5) * 2.0
 
 
-# CSS mockup'ta durum noktası top:-6px;right:-6px ile 148-208px genişlikli
-# bir karta göre konumlanıyordu. Kart genişliği bizim ortamımızda farklı
-# olduğundan literal 6px yerine bu oran kullanılıyor — 6/148, referans
-# mockup'ın idle genişliğine (148px) karşılık gelen kesir.
-DOT_OVERLAY_BIAS_RATIO = 6.0 / 148.0
+# DÜZELTME (bkz. user-qa-fix-report.md, Finding 2): eskiden buradaki 6/148
+# oranı, CSS mockup'ının top:-6px;right:-6px'ini bir merkez-yanlılığı
+# (bias) sanıp dot_overlay_center'ın zaten köşeye doğru merkezlediği
+# noktanın ÜSTÜNE ekliyordu. Ama mockup'taki -6px/-3px değerleri (ringStyle:
+# top:-6,right:-6,width:14,height:14 ve dotStyle: top:-3,right:-3,width:8,
+# height:8) birer KENAR ofsetiydi — iki farklı boyuttaki kutunun kendi
+# kenarına göre ifade edilmiş, ama ikisi de AYNI gerçek merkez noktasını
+# tarif ediyordu (14/2-6=1, 8/2-3=1 — ikisi de kutunun kendi merkezinden
+# 1px içeride, yani gerçekte kartın keskin köşesine merkezlenmiş demek).
+# Bunu ekstra bir dışa-itme olarak yeniden uygulamak noktayı köşeden
+# ölçülen ~10px kadar gerçekten kopartıyordu (bkz. rapor: idle'da nokta
+# köşeyle hiç örtüşmüyordu, en büyük kritik halka ölçeğinde bile 2.4px
+# kısa kalıyordu). Sıfıra çekildi: dot_overlay_center'ın kendi köşe
+# merkezlemesi zaten doğru referans noktası, üstüne ek bir pay gerekmiyor.
+DOT_OVERLAY_BIAS_RATIO = 0.0
 
 
 def dot_overlay_center(card_x: float, card_y: float, card_w: float) -> tuple[float, float]:
@@ -85,13 +95,15 @@ def dot_overlay_center(card_x: float, card_y: float, card_w: float) -> tuple[flo
     GÖRÜNÜR yuvarlatılmış silüeti bu keskin köşe noktasına asla ulaşmaz —
     silüetin sınırı oradan her zaman en az bir miktar içeride kalır (yarıçap
     ne olursa olsun, sıfırdan büyük olduğu sürece). Bu yüzden merkezi tam bu
-    keskin köşe noktasına (ya da ondan biraz daha dışına) koymak, DOT_SIZE
-    ya da CARD_RADIUS'un tam değerini bilmeye gerek kalmadan noktanın
-    görünür yuvarlatılmış silüetin tamamen dışında kalacağını garantiler —
-    sabit bir piksel sayısının "yeterli" olup olmadığını tahmin etmek yerine
-    geometrinin kendisinden gelen bir garanti, bu yüzden DPI/ölçeklemeden
-    bağımsız. Üstüne CSS mockup'ın "poke out" görünümünü yeniden üretmek için
-    küçük bir dışa taşma payı ekleniyor (bkz. DOT_OVERLAY_BIAS_RATIO).
+    keskin köşe noktasına koymak, DOT_SIZE ya da CARD_RADIUS'un tam değerini
+    bilmeye gerek kalmadan noktanın görünür yuvarlatılmış silüetin tamamen
+    dışında kalacağını garantiler — sabit bir piksel sayısının "yeterli"
+    olup olmadığını tahmin etmek yerine geometrinin kendisinden gelen bir
+    garanti, bu yüzden DPI/ölçeklemeden bağımsız. DOT_OVERLAY_BIAS_RATIO artık
+    0.0 (bkz. sabitin kendi yorumu, Finding 2): merkez tam bu keskin köşede
+    kalıyor, ekstra bir dışa itme YOK — nokta/halka/parlamanın gerçek çizili
+    piksel alanı böylece kartın köşesiyle gerçekten örtüşüyor, birkaç piksel
+    ötesinde havada asılı bir benek olarak durmuyor.
     """
     bias = card_w * DOT_OVERLAY_BIAS_RATIO
     cx = card_x + card_w + bias

@@ -1,8 +1,8 @@
 import pytest
 
 from card_geometry import (
-    corner_position, ease_out_cubic, glow_phase, interpolate,
-    point_in_rect, ring_phase, tween_frames,
+    DOT_OVERLAY_BIAS_RATIO, corner_position, dot_overlay_center, ease_out_cubic,
+    glow_phase, interpolate, point_in_rect, ring_phase, tween_frames,
 )
 
 
@@ -92,3 +92,46 @@ def test_glow_phase_peaks_at_midpoint_and_returns_to_zero():
     assert glow_phase(0) == pytest.approx(0.0)
     assert glow_phase(900) == pytest.approx(1.0)
     assert glow_phase(1800) == pytest.approx(0.0, abs=1e-9)
+
+
+# --------------------------------------------------------------------------
+# Finding 2 (user-qa-fix-report.md): DOT_OVERLAY_BIAS_RATIO eskiden bir CSS
+# KENAR-ofsetini (top:-6px;right:-6px) yanlışlıkla bir MERKEZ-yanlılığı gibi
+# ele alıp dot_overlay_center'ın zaten doğru köşe merkezinin ÜSTÜNE
+# ekliyordu — bu da noktayı köşeden gerçekte ~10px kadar koparıyordu.
+# Doğru referans, kartın kendi keskin köşe noktası (card_x+card_w, card_y).
+# --------------------------------------------------------------------------
+
+def test_dot_overlay_bias_ratio_is_zero():
+    # Regresyon: bu sıfır olmalı — sıfırdan farklı herhangi bir değer
+    # noktayı köşeden ekstra dışa itip görsel olarak koparır (bkz. rapor).
+    assert DOT_OVERLAY_BIAS_RATIO == 0.0
+
+
+def test_dot_overlay_center_sits_exactly_on_the_cards_sharp_corner():
+    card_x, card_y, card_w = 100.0, 200.0, 148.0
+    cx, cy = dot_overlay_center(card_x, card_y, card_w)
+    assert cx == pytest.approx(card_x + card_w)
+    assert cy == pytest.approx(card_y)
+
+
+def test_dot_overlay_center_drawn_content_overlaps_the_card():
+    # "Overlay canvas kutusunun %90'ı kartın dışında" yanıltıcı bir metrik
+    # (canvas'ın çoğu saydam dolgu) — asıl soru noktanın/halkanın/parlamanın
+    # GERÇEK ÇİZİLİ piksellerinin kartla örtüşüp örtüşmediği. Merkez noktası
+    # tam kartın keskin köşesinde olduğundan (bkz. yukarıdaki test), merkezin
+    # kart dikdörtgenine mesafesi 0 olmalı — bu da sıfırdan büyük HERHANGİ
+    # bir çizim yarıçapının (nokta, halka ya da parlama halosu) kartla
+    # gerçekten örtüştüğünü garanti eder.
+    card_x, card_y, card_w, card_h = 100.0, 200.0, 148.0, 52.0
+    cx, cy = dot_overlay_center(card_x, card_y, card_w)
+
+    nearest_x = min(max(cx, card_x), card_x + card_w)
+    nearest_y = min(max(cy, card_y), card_y + card_h)
+    dist_to_card = ((cx - nearest_x) ** 2 + (cy - nearest_y) ** 2) ** 0.5
+
+    assert dist_to_card == pytest.approx(0.0, abs=1e-9), (
+        f"nokta merkezi ({cx},{cy}) karttan {dist_to_card}px uzakta — "
+        "sıfırdan büyük olsaydı, çizili nokta/halka piksellerinin bir kısmı "
+        "kartla hiç örtüşmeyebilirdi"
+    )

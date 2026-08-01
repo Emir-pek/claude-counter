@@ -195,6 +195,34 @@ def test_dot_overlay_sits_mostly_outside_the_idle_cards_rect(geo_widget):
     assert overlay_y < card_y, "overlay üst kenarı aşmıyor"
 
 
+def test_dot_drawn_extent_overlaps_the_cards_corner(geo_widget):
+    # Finding 2 (user-qa-fix-report.md): "overlay kutusunun %90'ı kartın
+    # dışında" yanıltıcı bir metrik, çünkü DOT_CANVAS_SIZE'ın çoğu saydam
+    # dolgu. Asıl soru: noktanın kendi ÇİZİLİ pikselleri (_redraw_dot'un
+    # DOT_CANVAS_SIZE/2 merkezine dot_r yarıçapıyla çizdiği daire) kartla
+    # gerçekten örtüşüyor mu? Eski (bias=6/148) geometriyle bu test başarısız
+    # olurdu — nokta merkezi karttan ~8.5px uzaktaydı, dot_r=4'ün çok
+    # ötesinde.
+    geo_widget._set_expanded(False, animate=False)
+    geo_widget.update()
+    card_x, card_y, card_w, card_h = _card_rect(geo_widget)
+    overlay_x, overlay_y, overlay_w, overlay_h = _overlay_rect(geo_widget)
+
+    dot_cx = overlay_x + overlay_w / 2
+    dot_cy = overlay_y + overlay_h / 2
+    dot_r = app_module.DOT_SIZE / 2
+
+    nearest_x = min(max(dot_cx, card_x), card_x + card_w)
+    nearest_y = min(max(dot_cy, card_y), card_y + card_h)
+    dist = ((dot_cx - nearest_x) ** 2 + (dot_cy - nearest_y) ** 2) ** 0.5
+
+    assert dist <= dot_r, (
+        f"nokta merkezi ({dot_cx},{dot_cy}) yarıçap {dot_r} ile kartın "
+        f"({card_x},{card_y},{card_w},{card_h}) köşesini örtmüyor "
+        f"(mesafe {dist:.2f}px)"
+    )
+
+
 def test_dot_overlay_tracks_the_card_when_it_expands(geo_widget):
     geo_widget._set_expanded(False, animate=False)
     geo_widget.update()
@@ -243,6 +271,41 @@ def test_reopen_shows_the_dot_overlay_again(geo_widget):
         assert geo_widget.dot_overlay.state() != "withdrawn"
     finally:
         geo_widget._set_expanded(False, animate=False)
+
+
+def test_dot_overlay_survives_a_normal_hover_cycle(geo_widget):
+    # Kritik regresyon (Finding 1, user-qa-fix-report.md): _Row.set_expanded
+    # genişlerken/daralırken countdown.grid()/grid_remove() ile çocuk
+    # widget'ı haritaya alıp kaldırıyor. DotOverlay._on_app_unmap/_on_app_map
+    # guard'sız hâliyle bunu ana pencerenin kendi <Unmap>/<Map>'i sanıp
+    # overlay'i her idle'a dönüşte withdraw ediyordu — nokta varsayılan
+    # dinlenme durumunda hep görünmezdi. .state() kullanılıyor (gerçek
+    # Tk haritalanma durumu), winfo_rootx/vb DEĞİL: withdraw edilmiş bir
+    # overrideredirect pencere geometri sorgularında son bilinen değerleri
+    # döndürmeye devam eder, bu yüzden görünürlüğü ayırt etmezler.
+    geo_widget._set_expanded(False, animate=False)
+    geo_widget.update()
+    try:
+        assert geo_widget.dot_overlay.state() != "withdrawn", (
+            "başlangıçta (idle) nokta zaten gizli"
+        )
+
+        geo_widget._set_expanded(True, animate=False)
+        geo_widget.update()
+        assert geo_widget.dot_overlay.state() != "withdrawn", (
+            "genişlerken nokta gizlendi"
+        )
+
+        geo_widget._set_expanded(False, animate=False)
+        geo_widget.update()
+        # Asıl kritik iddia: hover'dan idle'a DÖNÜNCE nokta hâlâ görünür
+        # olmalı. Eski (guard'sız) kodda tam burada withdrawn olurdu.
+        assert geo_widget.dot_overlay.state() != "withdrawn", (
+            "idle'a dönünce nokta gizlendi — bu Finding 1'in tam kendisi"
+        )
+    finally:
+        geo_widget._set_expanded(False, animate=False)
+        geo_widget.update()
 
 
 def test_a_raw_withdraw_on_the_card_also_hides_the_dot_overlay(geo_widget):
