@@ -25,14 +25,14 @@ def _win(hours_ahead: float, util: float = 42.0) -> Window:
 
 
 def test_row_shows_percent_and_countdown(root):
-    row = app_module._Row(root, "5s")
+    row = app_module._Row(root, "5h")
     row.set(_win(2))
     assert row.pct.cget("text") == "42%"
     assert " · " in row.countdown.cget("text")
 
 
 def test_row_skips_countdown_write_when_text_unchanged(root):
-    row = app_module._Row(root, "5s")
+    row = app_module._Row(root, "5h")
     row.set(_win(2))
 
     writes = []
@@ -51,7 +51,7 @@ def test_row_skips_countdown_write_when_text_unchanged(root):
 
 
 def test_row_recovers_after_set_none(root):
-    row = app_module._Row(root, "5s")
+    row = app_module._Row(root, "5h")
     window = _win(2)
     row.set(window)
     good = row.countdown.cget("text")
@@ -65,10 +65,10 @@ def test_row_recovers_after_set_none(root):
 
 
 def test_row_expired_has_no_reset_time(root):
-    row = app_module._Row(root, "5s")
+    row = app_module._Row(root, "5h")
     row.set(_win(-1))
     text = row.countdown.cget("text")
-    assert "yenilendi" in text
+    assert "reset" in text
     assert " · " not in text
 
 
@@ -80,7 +80,7 @@ def test_row_day_name_disappears_after_local_midnight(root):
     resets_at = boundary + timedelta(hours=1)
     window = Window(utilization=42.0, resets_at=resets_at)
 
-    row = app_module._Row(root, "5s")
+    row = app_module._Row(root, "5h")
     row.window = window
 
     now_before_midnight = boundary - timedelta(minutes=10)
@@ -92,10 +92,10 @@ def test_row_day_name_disappears_after_local_midnight(root):
     assert " " not in expected_after
 
     row.refresh_countdown(now=now_before_midnight)
-    assert row.countdown.cget("text").endswith(f" · sıfırlanma {expected_before}")
+    assert row.countdown.cget("text").endswith(f" · resets {expected_before}")
 
     row.refresh_countdown(now=now_after_midnight)
-    assert row.countdown.cget("text").endswith(f" · sıfırlanma {expected_after}")
+    assert row.countdown.cget("text").endswith(f" · resets {expected_after}")
 
 
 def test_row_reset_time_disappears_when_expired(root):
@@ -104,7 +104,7 @@ def test_row_reset_time_disappears_when_expired(root):
     resets_at = anchor
     window = Window(utilization=42.0, resets_at=resets_at)
 
-    row = app_module._Row(root, "5s")
+    row = app_module._Row(root, "5h")
     row.window = window
 
     now_before = anchor - timedelta(minutes=5)
@@ -116,7 +116,7 @@ def test_row_reset_time_disappears_when_expired(root):
 
     row.refresh_countdown(now=now_after)
     text_after = row.countdown.cget("text")
-    assert "yenilendi" in text_after
+    assert "reset" in text_after
     assert " · " not in text_after
 
 
@@ -126,7 +126,7 @@ def test_row_format_reset_time_called_once_per_cycle(root):
     resets_at = anchor + timedelta(hours=3)
     window = Window(utilization=42.0, resets_at=resets_at)
 
-    row = app_module._Row(root, "5s")
+    row = app_module._Row(root, "5h")
     row.window = window
 
     calls = []
@@ -154,7 +154,7 @@ def test_row_format_reset_time_called_once_per_cycle(root):
 
 
 def test_row_critical_utilization_gets_a_border(root):
-    row = app_module._Row(root, "5s")
+    row = app_module._Row(root, "5h")
     row.set(_win(2, util=90.0))
     assert row.bar.cget("border_width") == 2
     row.set(_win(2, util=30.0))

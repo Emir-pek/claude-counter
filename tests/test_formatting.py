@@ -19,23 +19,23 @@ def _in(**kw):
 
 
 def test_countdown_days_and_hours():
-    assert format_countdown(_in(days=1, hours=12, minutes=30), NOW) == "1g 12s"
+    assert format_countdown(_in(days=1, hours=12, minutes=30), NOW) == "1d 12h"
 
 
 def test_countdown_hours_and_minutes():
-    assert format_countdown(_in(hours=1, minutes=12), NOW) == "1s 12dk"
+    assert format_countdown(_in(hours=1, minutes=12), NOW) == "1h 12m"
 
 
 def test_countdown_minutes_only():
-    assert format_countdown(_in(minutes=12), NOW) == "12dk"
+    assert format_countdown(_in(minutes=12), NOW) == "12m"
 
 
 def test_countdown_under_one_minute():
-    assert format_countdown(_in(seconds=30), NOW) == "1dk"
+    assert format_countdown(_in(seconds=30), NOW) == "1m"
 
 
 def test_countdown_expired():
-    assert format_countdown(_in(seconds=-5), NOW) == "yenilendi"
+    assert format_countdown(_in(seconds=-5), NOW) == "reset"
 
 
 def test_color_thresholds():
@@ -66,14 +66,14 @@ def test_reset_time_crosses_local_midnight_while_utc_day_is_same():
     now = datetime(2026, 7, 25, 19, 0, tzinfo=timezone.utc)
     resets = datetime(2026, 7, 25, 22, 0, tzinfo=timezone.utc)
     assert now.date() == resets.date()  # UTC tarihleri aynı
-    assert format_reset_time(resets, now, TR) == "Paz 01:00"
+    assert format_reset_time(resets, now, TR) == "Sun 01:00"
 
 
 def test_reset_time_days_away():
     # haftalık dilim: yerel 25 Temmuz 09:00 -> 31 Temmuz 12:58
     now = datetime(2026, 7, 25, 6, 0, tzinfo=timezone.utc)
     resets = datetime(2026, 7, 31, 9, 58, tzinfo=timezone.utc)
-    assert format_reset_time(resets, now, TR) == "Cum 12:58"
+    assert format_reset_time(resets, now, TR) == "Fri 12:58"
 
 
 def test_reset_time_expired_returns_empty():
@@ -93,8 +93,8 @@ def test_reset_time_uses_system_local_when_tz_omitted():
     assert re.fullmatch(r"(\w{3} )?\d{2}:\d{2}", out)
 
 
-def test_day_names_are_turkish_and_locale_independent():
-    assert DAY_NAMES == ("Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz")
+def test_day_names_are_english_and_locale_independent():
+    assert DAY_NAMES == ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 
 
 def test_worst_color_picks_the_more_severe_window():

@@ -63,9 +63,9 @@ def test_header_and_countdowns_are_hidden_while_idle(widget):
     assert widget.seven.countdown.grid_info() == {}
 
 
-def test_row_labels_are_short_turkish_abbreviations(widget):
-    assert widget.five.label.cget("text") == "5s"
-    assert widget.seven.label.cget("text") == "7g"
+def test_row_labels_are_short_english_abbreviations(widget):
+    assert widget.five.label.cget("text") == "5h"
+    assert widget.seven.label.cget("text") == "7d"
 
 
 def test_render_updates_both_rows(widget):
@@ -82,7 +82,7 @@ def test_render_error_sets_the_status_line_but_only_shows_it_expanded(widget):
 
 def test_rate_limited_error_uses_the_spec_copy(widget):
     widget.render_error(UsageError("rate_limited", "429"))
-    assert widget._status_text == "Sınıra takıldı — yeniden deneniyor"
+    assert widget._status_text == "Rate limited — retrying"
     assert widget._status_color == app_module.COLORS["bar_mid"]
 
 
@@ -93,7 +93,7 @@ def test_rate_limited_error_shows_when_expanded(widget):
     widget._set_expanded(True, animate=False)
     try:
         assert widget.status_label.grid_info() != {}
-        assert widget.status_label.cget("text") == "Sınıra takıldı — yeniden deneniyor"
+        assert widget.status_label.cget("text") == "Rate limited — retrying"
         assert widget.status_label.cget("text_color") == app_module.COLORS["bar_mid"]
     finally:
         widget._set_expanded(False, animate=False)
