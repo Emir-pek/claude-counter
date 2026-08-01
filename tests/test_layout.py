@@ -8,11 +8,23 @@ from usage_client import UsageData, UsageError, Window
 
 @pytest.fixture(scope="module")
 def widget():
+    # widget.withdraw() gizler ama Windows'ta bu Tk derlemesinde withdraw
+    # edilmiş bir overrideredirect penceresi bir daha asla yeniden
+    # boyutlanmıyor (yalnızca konum güncelleniyor) — Task 6'nın tween/hover
+    # testleri gerçek bir _set_expanded sonrası genişliği doğrulamak zorunda
+    # olduğu için bu artık işe yaramıyor. Bunun yerine pencereyi haritalı
+    # (mapped) tutup work_area_rect'i ekranın çok dışına sahte bir alana
+    # yönlendiriyoruz: yeniden boyutlanma normal çalışıyor, kullanıcı hiçbir
+    # zaman gerçek bir pencere görmüyor.
+    original_work_area_rect = app_module.work_area_rect
+    app_module.work_area_rect = lambda: (100_000, 100_000, 400, 300)
     w = app_module.UsageApp()
     w.update()
-    w.withdraw()
-    yield w
-    w.destroy()
+    try:
+        yield w
+    finally:
+        w.destroy()
+        app_module.work_area_rect = original_work_area_rect
 
 
 def _fill(widget, five=100.0, seven=100.0):
@@ -91,3 +103,53 @@ def test_snap_to_survives_a_win32_failure(widget, monkeypatch):
 
     monkeypatch.setattr(app_module, "frame_hwnd", _boom)
     widget._snap_to(app_module.CARD_W_IDLE, 100, app_module.IDLE_OPACITY)
+
+
+def test_expanding_reveals_header_and_countdowns(widget):
+    widget._set_expanded(True, animate=False)
+    try:
+        assert widget.header.grid_info() != {}
+        assert widget.five.countdown.grid_info() != {}
+        assert widget.seven.countdown.grid_info() != {}
+        assert _width(widget) == app_module.CARD_W_EXPANDED
+        assert widget.attributes("-alpha") == pytest.approx(1.0)
+    finally:
+        widget._set_expanded(False, animate=False)
+
+
+def test_expanding_grows_the_bars(widget):
+    widget._set_expanded(True, animate=False)
+    try:
+        assert widget.five.bar.cget("height") == app_module.BAR_H_EXPANDED
+    finally:
+        widget._set_expanded(False, animate=False)
+    assert widget.five.bar.cget("height") == app_module.BAR_H_IDLE
+
+
+def test_poll_hover_expands_when_pointer_is_inside(widget):
+    widget._set_expanded(False, animate=False)
+    widget._hovered = False
+    original = widget.winfo_pointerxy
+    x, y = widget.winfo_rootx(), widget.winfo_rooty()
+    widget.winfo_pointerxy = lambda: (x + 5, y + 5)  # kartın içi
+    try:
+        widget._poll_hover_once()
+        assert widget._hovered is True
+        assert widget._expanded is True
+    finally:
+        widget.winfo_pointerxy = original
+        widget._set_expanded(False, animate=False)
+
+
+def test_poll_hover_collapses_when_pointer_leaves(widget):
+    widget._set_expanded(True, animate=False)
+    widget._hovered = True
+    original = widget.winfo_pointerxy
+    widget.winfo_pointerxy = lambda: (-500, -500)  # kartın dışı
+    try:
+        widget._poll_hover_once()
+        assert widget._hovered is False
+        assert widget._expanded is False
+    finally:
+        widget.winfo_pointerxy = original
+        widget._set_expanded(False, animate=False)

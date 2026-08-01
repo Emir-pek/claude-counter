@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 
 import customtkinter as ctk
 
-from card_geometry import corner_position
+from card_geometry import corner_position, interpolate, point_in_rect, tween_frames
 from formatting import GREEN, RED, YELLOW, color_for, format_countdown, format_reset_time, worst_color
 from usage_client import UsageData, UsageError
 from win_theme import apply_titlebar_theme, frame_hwnd, set_rounded_region, work_area_rect
@@ -255,6 +255,7 @@ class UsageApp(ctk.CTk):
 
         self.update_idletasks()
         self._set_expanded(False, animate=False)
+        self.after(HOVER_POLL_MS, self._poll_hover_loop)
 
     def _on_refresh_click(self, _event=None):
         if self.on_refresh:
@@ -264,21 +265,41 @@ class UsageApp(ctk.CTk):
         pass  # Task 8'de dolduruluyor
 
     def _set_expanded(self, expanded: bool, animate: bool = True):
-        """Idle/expanded gorunum degisimi (Task 6, tween ile degistirecek)."""
         self._expanded = expanded
+
+        # Not: grid_configure() gizli (grid_remove'lu) bir widget'ı Tk'de
+        # yeniden haritalar ("grid configure" == parametreli "grid" çağrısı).
+        # Bu yüzden pad/pady ayarları önce, görünürlük kararları (aşağıda
+        # header.grid()/grid_remove() ve set_expanded çağrıları) sonra
+        # gelmeli — aksi halde gizlenmesi gereken widget'lar tekrar görünür
+        # olur.
+        pad_x = 12 if expanded else 10
+        top_pad = 10 if expanded else 8
+        self.header.grid_configure(padx=pad_x, pady=(top_pad, 6))
+        self.five.frame.grid_configure(padx=pad_x, pady=(0 if expanded else top_pad, 0))
+        self.five.countdown.grid_configure(padx=(24, pad_x))
+        self.seven.frame.grid_configure(padx=pad_x, pady=(8 if expanded else 6, 0))
+        self.seven.countdown.grid_configure(padx=(24, pad_x))
+        self.status_label.grid_configure(padx=pad_x, pady=(4, top_pad))
+
         if expanded:
             self.header.grid()
         else:
             self.header.grid_remove()
         self.five.set_expanded(expanded)
         self.seven.set_expanded(expanded)
+
         self._refresh_status_visibility()
         self.update_idletasks()
 
         width = CARD_W_EXPANDED if expanded else CARD_W_IDLE
         height = self.card.winfo_reqheight()
         alpha = 1.0 if expanded else IDLE_OPACITY
-        self._snap_to(width, height, alpha)
+
+        if not self._laid_out or not animate:
+            self._snap_to(width, height, alpha)
+        else:
+            self._tween_to(width, height, alpha)
 
     def _snap_to(self, width: int, height: int, alpha: float):
         work = work_area_rect() or (0, 0, self.winfo_screenwidth(), self.winfo_screenheight())
@@ -291,6 +312,47 @@ class UsageApp(ctk.CTk):
         except Exception:
             pass
         self._laid_out = True
+
+    def _tween_to(self, target_w: int, target_h: int, target_alpha: float):
+        # Aradaki bir hover geldiğinde eski animasyon iptal olsun diye token.
+        self._tween_token = getattr(self, "_tween_token", 0) + 1
+        token = self._tween_token
+        start_w, start_h = self.winfo_width(), self.winfo_height()
+        start_alpha = float(self.attributes("-alpha"))
+        frames = tween_frames(TWEEN_STEPS)
+        step_delay = max(1, TWEEN_MS // TWEEN_STEPS)
+
+        def step(i):
+            if token != self._tween_token:
+                return
+            t = frames[i]
+            w = round(interpolate(start_w, target_w, t))
+            h = round(interpolate(start_h, target_h, t))
+            alpha = interpolate(start_alpha, target_alpha, t)
+            self._snap_to(w, h, alpha)
+            if i + 1 < len(frames):
+                self.after(step_delay, lambda: step(i + 1))
+
+        step(0)
+
+    def _poll_hover_once(self):
+        try:
+            px, py = self.winfo_pointerxy()
+            rect = (self.winfo_rootx(), self.winfo_rooty(),
+                   self.winfo_width(), self.winfo_height())
+            hovered = point_in_rect(px, py, rect)
+        except Exception:
+            hovered = self._hovered
+        if hovered != self._hovered:
+            self._hovered = hovered
+            if EXPAND_ON_HOVER:
+                self._set_expanded(hovered)
+            else:
+                self.attributes("-alpha", 1.0 if hovered else IDLE_OPACITY)
+
+    def _poll_hover_loop(self):
+        self._poll_hover_once()
+        self.after(HOVER_POLL_MS, self._poll_hover_loop)
 
     def _refresh_status_visibility(self):
         show = self._expanded and bool(self._status_text)
