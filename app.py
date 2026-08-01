@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import os
+import time
 import tkinter as tk
 from datetime import datetime, timezone
 
 import customtkinter as ctk
 
-from card_geometry import corner_position, interpolate, point_in_rect, tween_frames
+from card_geometry import corner_position, glow_phase, interpolate, point_in_rect, ring_phase, tween_frames
 from formatting import GREEN, RED, YELLOW, color_for, format_countdown, format_reset_time, worst_color
 from usage_client import UsageData, UsageError
 from win_theme import apply_titlebar_theme, frame_hwnd, set_rounded_region, work_area_rect
@@ -385,6 +386,27 @@ class UsageApp(ctk.CTk):
                       fill=_BAR_COLOR[self._level], outline=COLORS["window"],
                       width=1.5 + glow * 2.0)
 
+    def _update_dot(self):
+        was_critical = self._ring_after is not None
+        is_critical = self._level == RED
+        self._redraw_dot()
+        if is_critical and not was_critical:
+            self._ring_start = time.monotonic()
+            self._tick_ring()
+        elif not is_critical and was_critical:
+            self.after_cancel(self._ring_after)
+            self._ring_after = None
+
+    def _tick_ring(self):
+        if self._level != RED:
+            self._ring_after = None
+            return
+        elapsed_ms = (time.monotonic() - self._ring_start) * 1000
+        scale, visible = ring_phase(elapsed_ms)
+        glow = glow_phase(elapsed_ms)
+        self._redraw_dot(ring_scale=scale, ring_visible=visible, glow=glow)
+        self._ring_after = self.after(RING_TICK_MS, self._tick_ring)
+
     def render(self, data: UsageData):
         self._data = data
         self._status_text = ""
@@ -393,8 +415,9 @@ class UsageApp(ctk.CTk):
         utils = [w.utilization if w is not None else None
                 for w in (data.five_hour, data.seven_day)]
         self._level = worst_color(*utils)
-        self._redraw_dot()
+        self._update_dot()
         self._refresh_status_visibility()
+
 
     def render_error(self, err: UsageError):
         if err.kind == "rate_limited":
