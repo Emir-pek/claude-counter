@@ -278,6 +278,61 @@ def test_poll_hover_only_toggles_alpha_when_expand_on_hover_is_off(widget, monke
         widget._set_expanded(False, animate=False)
 
 
+def test_pointer_crossing_expands_without_waiting_for_the_poll(widget):
+    """İmleç karta girdiğinde animasyon yoklama sırasını BEKLEMEMELİ.
+
+    Gerileme testi: hover yalnızca HOVER_POLL_MS'lik zamanlayıcıyla
+    saptanıyordu, yani imlecin girmesiyle animasyonun başlaması arasında
+    0-50ms ölü zaman vardı. Burada zamanlayıcı hiç çalıştırılmıyor —
+    yalnızca crossing olayı tetikleniyor — ve kartın buna rağmen genişlemiş
+    olması gerekiyor.
+    """
+    widget._set_expanded(False, animate=False)
+    widget._hovered = False
+    original = widget.winfo_pointerxy
+    try:
+        cx = widget.winfo_rootx() + widget.winfo_width() // 2
+        cy = widget.winfo_rooty() + widget.winfo_height() // 2
+        widget.winfo_pointerxy = lambda: (cx, cy)
+
+        widget._on_pointer_cross()  # <Enter>'ın bağlandığı yol
+
+        assert widget._hovered is True
+        assert widget._expanded is True
+    finally:
+        widget.winfo_pointerxy = original
+        widget._hovered = False
+        widget._set_expanded(False, animate=False)
+
+
+def test_pointer_crossing_is_only_a_hint_not_the_decision(widget):
+    """Sahte crossing olayı (torun widget'lardan gelen) yanlış karar verdirmemeli.
+
+    <Enter>/<Leave> bindtag üzerinden çocuk widget'lar için de ateşleniyor;
+    kart genişlerken imlecin altında yeni çocuklar belirdiği için bunlar
+    kaçınılmaz. Kararı olay değil dikdörtgen testi vermeli.
+    """
+    widget._set_expanded(False, animate=False)
+    widget._hovered = False
+    original = widget.winfo_pointerxy
+    try:
+        widget.winfo_pointerxy = lambda: (-500, -500)  # kartın dışı
+        widget._on_pointer_cross()  # olay geldi ama imleç dışarıda
+        assert widget._hovered is False
+        assert widget._expanded is False
+    finally:
+        widget.winfo_pointerxy = original
+        widget._hovered = False
+        widget._set_expanded(False, animate=False)
+
+
+def test_crossing_events_are_bound_on_the_window(widget):
+    # Olay yolu gerçekten bağlı mı — _on_pointer_cross'u doğrudan çağıran
+    # testler bağlamanın kendisini kanıtlamıyor.
+    for sequence in ("<Enter>", "<Leave>"):
+        assert widget.bind(sequence), f"{sequence} bağlanmamış"
+
+
 def test_tween_position_follows_the_clock_not_the_frame_count(widget, monkeypatch):
     """Kart nerede olacağını GEÇEN SÜREden almalı, kaçıncı kare olduğundan değil.
 

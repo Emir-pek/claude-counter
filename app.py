@@ -490,6 +490,13 @@ class UsageApp(ctk.CTk):
 
         self.update_idletasks()
         self._set_expanded(False, animate=False)
+        # İki yollu hover saptama: olaylar gecikmeyi sıfırlıyor (bkz.
+        # _on_pointer_cross), yoklama döngüsü ise olayların ıskaladığı
+        # durumları yakalayan otorite olarak kalıyor — kart imlecin ALTINDA
+        # büyüyüp küçüldüğü için imleç hiç kıpırdamadan kartın içinde/dışında
+        # kalabiliyor ve bu geçişte crossing olayı gelmeyebilir.
+        self.bind("<Enter>", self._on_pointer_cross, add="+")
+        self.bind("<Leave>", self._on_pointer_cross, add="+")
         self.after(HOVER_POLL_MS, self._poll_hover_loop)
         self.reopen_tab = ReopenTab(self)
 
@@ -692,6 +699,32 @@ class UsageApp(ctk.CTk):
                 self.after(TWEEN_FRAME_MS, step)
 
         step()
+
+    def _on_pointer_cross(self, _event=None):
+        """İmleç bir sınırı geçti — yoklama sırasını bekleme, HEMEN bak.
+
+        Ölü zamanın kaynağı buydu: hover yalnızca HOVER_POLL_MS'lik
+        zamanlayıcıyla saptandığı için, imleç karta girdiği an ile
+        animasyonun başladığı an arasında 0-50ms (ortalama ~25ms) hiçbir
+        şeyin olmadığı bir boşluk kalıyordu. Kullanıcı bunu animasyonun
+        kendisinden ayrı bir "geç tepki" olarak hissediyordu.
+
+        Yoklama aralığını kısaltmak yerine olay bağlanmasının seçilmesinin
+        nedeni: yoklama gecikmeyi yalnızca KÜÇÜLTÜR (8ms'de bile hâlâ
+        vardır) ve bunu bütün gün, saniyede 125 zamanlayıcı uyanmasıyla
+        yapar — pilden çalışan bir laptopta her zaman açık duran bir
+        widget için kötü bir takas. Olay yolu gecikmeyi SIFIRLIYOR ve
+        boştayken hiçbir şeye mal olmuyor.
+
+        Olay yalnızca bir İPUCU; karar yine _poll_hover_once'ın dikdörtgen
+        testinde. Bu kasıtlı: <Enter>/<Leave> bindtag üzerinden torun
+        widget'lar için de ateşleniyor (DotOverlay'in <Unmap> tuzağının
+        aynısı, bkz. oradaki not) ve kart genişlerken imlecin altında yeni
+        çocuklar belirdiği için sahte olaylar kaçınılmaz. Sahte bir olayın
+        maliyeti fazladan bir 0.003ms'lik yoklama; yanlış karar verme
+        ihtimali yok, çünkü kararı olay değil dikdörtgen veriyor.
+        """
+        self._poll_hover_once()
 
     def _poll_hover_once(self):
         if not self.winfo_ismapped():
