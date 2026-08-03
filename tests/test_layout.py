@@ -45,12 +45,25 @@ def _width(widget):
     return int(widget.wm_geometry().split("+")[0].split("x")[0])
 
 
+def _scaled(widget, logical: int) -> int:
+    """Mantıksal (tasarım) piksel -> o makinedeki gerçek fiziksel piksel.
+
+    CTk, geometry()'ye verilen genişlik/yüksekliği pencere ölçeklemesiyle
+    çarpar (bkz. app.UsageApp._apply_geometry): CARD_W_IDLE gibi sabitler
+    mantıksal, wm_geometry()'nin okuduğu değer ise fiziksel. %100
+    ölçeklemede ikisi aynı sayıdır, %125'te değil — bu yüzden testler ham
+    sabitle değil, bu dönüşümle karşılaştırmalı. Aksi halde suite yalnızca
+    ölçeklemesiz bir makinede geçer.
+    """
+    return round(logical * widget._window_scaling())
+
+
 def test_window_has_no_native_titlebar(widget):
     assert widget.overrideredirect()
 
 
 def test_idle_card_is_148_wide(widget):
-    assert _width(widget) == app_module.CARD_W_IDLE
+    assert _width(widget) == _scaled(widget, app_module.CARD_W_IDLE)
 
 
 def test_idle_opacity_matches_the_configured_default(widget):
@@ -112,6 +125,60 @@ def test_window_is_smaller_than_the_old_decorated_layout(widget):
     assert app_module.CARD_W_EXPANDED < 260
 
 
+def _placed_rect(widget):
+    """wm_geometry()'den (fiziksel px) okunan (x, y, genişlik, yükseklik)."""
+    size, x, y = widget.wm_geometry().replace("+", " +").split()[0:3]
+    w, h = size.split("x")
+    return (int(x), int(y), int(w), int(h))
+
+
+@pytest.mark.parametrize("expanded", [False, True])
+def test_card_stays_inside_the_work_area_under_dpi_scaling(widget, monkeypatch, expanded):
+    """Kart, DPI ölçeklemesi ne olursa olsun çalışma alanının dışına taşmamalı.
+
+    Gerileme testi: kart köşeye MANTIKSAL genişliğine (148) göre
+    konumlanıyordu ama CTk pencereyi FİZİKSEL genişlikte (%125'te 185)
+    oluşturuyordu — aradaki fark kadarı sağ kenardan taşıp görünmez
+    oluyordu (%125'te tam olarak genişliğin %20'si). Fixture'ın sahte
+    çalışma alanı kullanıldığı için sonuç testi çalıştıran makinenin
+    gerçek çözünürlüğünden bağımsız.
+    """
+    # Fixture'ın sahte alanı (100_000) bu doğrulama için kullanılamaz: Tk
+    # pencere koordinatlarını 16 bitle sınırlıyor ve wm_geometry() 32767'ye
+    # kırpılmış okuyor. Aynı "ekranın dışında ama ölçülebilir" amacı
+    # koruyan, 16 bite sığan bir alana geçiyoruz.
+    fake_work = (5_000, 5_000, 400, 300)
+    monkeypatch.setattr(app_module, "work_area_rect", lambda: fake_work)
+    widget._set_expanded(expanded, animate=False)
+    try:
+        wx, wy, ww, wh = fake_work
+        x, y, w, h = _placed_rect(widget)
+        assert x >= wx
+        assert y >= wy
+        assert x + w <= wx + ww, "kartın sağ kenarı çalışma alanının dışına taştı"
+        assert y + h <= wy + wh, "kartın alt kenarı çalışma alanının dışına taştı"
+    finally:
+        widget._set_expanded(False, animate=False)
+
+
+def test_rounded_region_covers_the_whole_window(widget, monkeypatch):
+    """Yuvarlak-köşe kırpma bölgesi pencerenin GERÇEK boyutunu kaplamalı.
+
+    Bölge fiziksel piksellerle çalışan bir Win32 çağrısı (SetWindowRgn);
+    ona mantıksal ölçüler verilirse %125'te 185px'lik pencerenin yalnızca
+    soldaki 148px'i çizilir — kullanıcının "sağ tarafı gözükmüyor"
+    şikâyetinin ikinci yarısı buydu.
+    """
+    calls = []
+    monkeypatch.setattr(app_module, "set_rounded_region",
+                        lambda hwnd, w, h, r: calls.append((w, h, r)) or True)
+    widget._set_expanded(False, animate=False)
+    assert calls, "snap sırasında set_rounded_region çağrılmalıydı"
+    region_w, region_h, _radius = calls[-1]
+    _x, _y, win_w, win_h = _placed_rect(widget)
+    assert (region_w, region_h) == (win_w, win_h)
+
+
 def test_snap_to_survives_a_win32_failure(widget, monkeypatch):
     def _boom(_window):
         raise OSError("GetParent failed")
@@ -140,7 +207,7 @@ def test_expanding_reveals_header_and_countdowns(widget):
         assert widget.header.grid_info() != {}
         assert widget.five.countdown.grid_info() != {}
         assert widget.seven.countdown.grid_info() != {}
-        assert _width(widget) == app_module.CARD_W_EXPANDED
+        assert _width(widget) == _scaled(widget, app_module.CARD_W_EXPANDED)
         assert widget.attributes("-alpha") == pytest.approx(1.0)
     finally:
         widget._set_expanded(False, animate=False)
@@ -232,14 +299,14 @@ def test_instant_snap_cancels_a_pending_tween(widget):
         assert pending, "tween en az bir after() adımı zamanlamalıydı"
 
         widget._set_expanded(False, animate=False)  # anlık snap: bekleyen tween'i geçersiz kılmalı
-        assert _width(widget) == app_module.CARD_W_IDLE
+        assert _width(widget) == _scaled(widget, app_module.CARD_W_IDLE)
         assert widget.attributes("-alpha") == pytest.approx(app_module.IDLE_OPACITY)
 
         for callback in pending:
             callback()  # tween'in artık öksüz kalan adımını elle tetikle
 
         # Öksüz adım hiçbir şey yapmamalı: geometri hâlâ anlık snap hedefinde.
-        assert _width(widget) == app_module.CARD_W_IDLE
+        assert _width(widget) == _scaled(widget, app_module.CARD_W_IDLE)
         assert widget.attributes("-alpha") == pytest.approx(app_module.IDLE_OPACITY)
     finally:
         widget.after = original_after

@@ -234,11 +234,14 @@ class ReopenTab(tk.Toplevel):
         self.attributes("-alpha", 0.85)
         self.configure(bg=COLORS["window"])
 
-        canvas = tk.Canvas(self, width=REOPEN_SIZE, height=REOPEN_SIZE,
+        # DotOverlay ile aynı gerekçe: ham tk.Toplevel, CTk ölçeklemesi yok,
+        # boyutlar elle fiziksel piksele çevriliyor (bkz. UsageApp._px).
+        size = app._px(REOPEN_SIZE)
+        canvas = tk.Canvas(self, width=size, height=size,
                            bg=COLORS["window"], highlightthickness=0, bd=0)
         canvas.pack(fill="both", expand=True)
-        r = 4
-        cx = cy = REOPEN_SIZE / 2
+        r = app._px(4)
+        cx = cy = size / 2
         canvas.create_oval(cx - r, cy - r, cx + r, cy + r,
                            fill=COLORS["accent"], outline="")
         canvas.bind("<Button-1>", self._on_click)
@@ -257,11 +260,13 @@ class ReopenTab(tk.Toplevel):
     def show(self):
         work = work_area_rect() or (0, 0, self._app.winfo_screenwidth(),
                                     self._app.winfo_screenheight())
-        x, y = corner_position(work, (REOPEN_SIZE, REOPEN_SIZE), CORNER, SCREEN_MARGIN)
-        self.geometry(f"{REOPEN_SIZE}x{REOPEN_SIZE}+{x}+{y}")
+        size = self._app._px(REOPEN_SIZE)
+        margin = self._app._px(SCREEN_MARGIN)
+        x, y = corner_position(work, (size, size), CORNER, margin)
+        self.geometry(f"{size}x{size}+{x}+{y}")
         self.update_idletasks()
         try:
-            set_rounded_region(frame_hwnd(self), REOPEN_SIZE, REOPEN_SIZE, 10)
+            set_rounded_region(frame_hwnd(self), size, size, self._app._px(10))
         except Exception:
             pass
         self.deiconify()
@@ -309,8 +314,11 @@ class DotOverlay(tk.Toplevel):
         self.attributes("-transparentcolor", TRANSPARENT_KEY)
         self.configure(bg=TRANSPARENT_KEY)
 
+        # Ham tk.Toplevel: CTk'nin ölçeklemesi buraya uğramıyor, bu yüzden
+        # boyut elle fiziksel piksele çevriliyor (bkz. UsageApp._px).
+        size = app._px(DOT_CANVAS_SIZE)
         self.canvas = tk.Canvas(
-            self, width=DOT_CANVAS_SIZE, height=DOT_CANVAS_SIZE,
+            self, width=size, height=size,
             bg=TRANSPARENT_KEY, highlightthickness=0, bd=0,
         )
         self.canvas.pack(fill="both", expand=True)
@@ -380,10 +388,11 @@ class DotOverlay(tk.Toplevel):
             return
         self._last_key = key
         cx, cy = dot_overlay_center(card_x, card_y, card_w)
-        x = round(cx - DOT_CANVAS_SIZE / 2)
-        y = round(cy - DOT_CANVAS_SIZE / 2)
+        size = self._app._px(DOT_CANVAS_SIZE)
+        x = round(cx - size / 2)
+        y = round(cy - size / 2)
         try:
-            self.geometry(f"{DOT_CANVAS_SIZE}x{DOT_CANVAS_SIZE}+{x}+{y}")
+            self.geometry(f"{size}x{size}+{x}+{y}")
         except Exception:
             pass
 
@@ -539,7 +548,11 @@ class UsageApp(ctk.CTk):
         self.update_idletasks()
 
         width = CARD_W_EXPANDED if expanded else CARD_W_IDLE
-        height = self.card.winfo_reqheight()
+        # winfo_reqheight() FİZİKSEL piksel döner (içindeki widget'lar zaten
+        # CTk'nin widget ölçeklemesiyle büyütülmüş fontlar/padding'lerle
+        # yerleşti), _apply_geometry ise MANTIKSAL bekliyor — bölünmezse
+        # yükseklik ölçeklemeyle bir kez daha çarpılıp iki kat ölçekleniyor.
+        height = round(self.card.winfo_reqheight() / self._window_scaling())
         alpha = 1.0 if expanded else IDLE_OPACITY
 
         if not self._laid_out or not animate:
@@ -557,14 +570,60 @@ class UsageApp(ctk.CTk):
         self._tween_token = getattr(self, "_tween_token", 0) + 1
         self._apply_geometry(width, height, alpha)
 
+    def _window_scaling(self) -> float:
+        """CTk'nin bu pencereye uyguladığı DPI ölçekleme çarpanı (%125 -> 1.25).
+
+        Ölçekleme okunamazsa 1.0: kart yanlış ölçekten dolayı hiç açılmamak
+        yerine ölçeklemesiz makinedeki davranışına düşsün — dosyanın geri
+        kalanındaki win32 "başarısızlığı yut" kalıbının aynısı.
+        """
+        try:
+            return float(self._get_window_scaling())
+        except Exception:
+            return 1.0
+
+    def _px(self, logical: float) -> int:
+        """Mantıksal (tasarım) piksel -> fiziksel piksel.
+
+        Kartın KENDİSİ için gerekmez (CTk.geometry() çarpmayı zaten yapıyor);
+        bu, CTk'nin ölçeklemesine hiç uğramayan ham tk.Toplevel'ler
+        (DotOverlay, ReopenTab) ve onların canvas çizimleri için — onlar
+        doğrudan fiziksel piksel konuşuyor, dolayısıyla tasarım sabitlerini
+        elle ölçeklemek zorundalar.
+        """
+        return round(logical * self._window_scaling())
+
     def _apply_geometry(self, width: int, height: int, alpha: float):
+        """width/height MANTIKSAL (tasarım) piksel — CARD_W_IDLE ile aynı birim.
+
+        İki farklı piksel birimi var ve karıştırılmaları bu widget'ın
+        ölçeklenmiş ekranlarda kırpılmasına yol açmıştı (bkz. aşağıdaki
+        pw/ph notu):
+
+        - MANTIKSAL: tasarım sabitleri (CARD_W_IDLE, CARD_RADIUS,
+          SCREEN_MARGIN) ve CTk'nin geometry()'sine verilen değerler.
+        - FİZİKSEL: gerçek ekran pikselleri — win32'nin (work_area_rect,
+          SetWindowRgn) ve Tk'nin winfo_* sorgularının konuştuğu birim.
+        """
+        s = self._window_scaling()
+        # CTk.geometry() genişlik/yüksekliği ölçeklemeyle ÇARPAR ama x/y'ye
+        # dokunmaz (customtkinter scaling_base_class._apply_geometry_scaling).
+        # Yani pencere gerçekte pw x ph fiziksel piksel oluyor; köşe hesabı
+        # ile bölge kırpması bunu bilmezse (eskiden bilmiyordu) %125'te kart
+        # 148 mantıksal piksele göre konumlanırken 185 fiziksel piksel
+        # genişliğinde doğuyor ve aradaki %20 sağ kenardan taşıp kayboluyordu.
+        # pw/ph bilinçli olarak CTk'nin kullandığı ifadenin AYNISIYLA
+        # (round(mantıksal * ölçek)) türetiliyor, winfo_width() ile geri
+        # okunarak değil: aynı girdi + aynı fonksiyon = yuvarlama
+        # sınırlarında bile piksel piksel aynı sonuç.
+        pw, ph = round(width * s), round(height * s)
         work = work_area_rect() or (0, 0, self.winfo_screenwidth(), self.winfo_screenheight())
-        x, y = corner_position(work, (width, height), CORNER, SCREEN_MARGIN)
+        x, y = corner_position(work, (pw, ph), CORNER, round(SCREEN_MARGIN * s))
         self.geometry(f"{width}x{height}+{x}+{y}")
         self.attributes("-alpha", alpha)
         self.update_idletasks()
         try:
-            set_rounded_region(frame_hwnd(self), width, height, CARD_RADIUS)
+            set_rounded_region(frame_hwnd(self), pw, ph, round(CARD_RADIUS * s))
         except Exception:
             pass
         # Nokta, kartın her tween adımında/snap'inde onunla birlikte
@@ -577,7 +636,13 @@ class UsageApp(ctk.CTk):
         # Aradaki bir hover geldiğinde eski animasyon iptal olsun diye token.
         self._tween_token = getattr(self, "_tween_token", 0) + 1
         token = self._tween_token
-        start_w, start_h = self.winfo_width(), self.winfo_height()
+        # winfo_* FİZİKSEL, hedefler MANTIKSAL: başlangıç noktası da
+        # mantıksala çevrilmezse tween %125'te "185'ten 208'e" gibi iki
+        # farklı birim arasında interpolasyon yapar ve kart açılırken önce
+        # geriye sıçrar.
+        s = self._window_scaling()
+        start_w = round(self.winfo_width() / s)
+        start_h = round(self.winfo_height() / s)
         start_alpha = float(self.attributes("-alpha"))
         frames = tween_frames(TWEEN_STEPS)
         step_delay = max(1, TWEEN_MS // TWEEN_STEPS)
@@ -631,12 +696,17 @@ class UsageApp(ctk.CTk):
     def _redraw_dot(self, ring_scale=None, ring_visible=False, glow=0.0):
         c = self.dot_canvas
         c.delete("all")
-        cx = cy = DOT_CANVAS_SIZE / 2
+        # Canvas ham bir tk.Toplevel'in içinde: koordinatları FİZİKSEL
+        # piksel. Ölçeklenmezse nokta, kartın kendisi DPI ile büyürken
+        # tasarım boyutunda (küçük) kalırdı.
+        s = self._window_scaling()
+        cx = cy = self._px(DOT_CANVAS_SIZE) / 2
+        line_w = 1.5 * s
         if ring_visible and ring_scale:
-            r = (RING_SIZE / 2) * ring_scale
+            r = (RING_SIZE * s / 2) * ring_scale
             c.create_oval(cx - r, cy - r, cx + r, cy + r,
-                          outline=COLORS["bar_critical"], width=1.5)
-        dot_r = DOT_SIZE / 2
+                          outline=COLORS["bar_critical"], width=line_w)
+        dot_r = DOT_SIZE * s / 2
         if glow > 0:
             # Nabız, noktanın kendi outline'ını kalınlaştırarak değil —
             # arkasına, gerçek şiddet rengiyle çizilmiş ayrı ve büyüyen bir
@@ -645,12 +715,12 @@ class UsageApp(ctk.CTk):
             # Tk'nin merkezden çizdiği outline'ın dışa taşan yarısı arka
             # planla görünmez kalır, içe taşan yarısı ise noktanın kendi
             # dolgusunu yiyip "parlama" yerine "küçülme" izlenimi verirdi.
-            glow_r = dot_r + glow * 3
+            glow_r = dot_r + glow * 3 * s
             c.create_oval(cx - glow_r, cy - glow_r, cx + glow_r, cy + glow_r,
-                          outline=_BAR_COLOR[self._level], width=1.5)
+                          outline=_BAR_COLOR[self._level], width=line_w)
         c.create_oval(cx - dot_r, cy - dot_r, cx + dot_r, cy + dot_r,
                       fill=_BAR_COLOR[self._level], outline=COLORS["window"],
-                      width=1.5)
+                      width=line_w)
 
     def _update_dot(self):
         was_critical = self._ring_after is not None
