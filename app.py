@@ -120,10 +120,18 @@ HOVER_POLL_MS = 50
 # ve süre artık gerçekten TWEEN_MS (ölçülen 186ms). Kare SAYISI kasten hedef
 # değil (~12'de kaldı): bir yeniden boyutlandırmanın ölçülen ~15ms'lik CTk
 # yeniden çizim maliyeti tavanı koyuyor, o yüzden asıl kazanç kare sayısında
-# değil, adımların DÜZENLİLİĞİNDE (bkz. card_geometry.smoothstep). Ekran
-# 165Hz -> kare bütçesi 6.1ms; yenileme hızı makineye göre değişir (eski
-# masaüstü büyük olasılıkla 60Hz'di, orada aynı kod düzgün görünüyordu) —
-# bu yüzden hedef "N kare" değil, kare sayısından BAĞIMSIZ düzgün hareket.
+# değil, adımların DÜZENLİLİĞİNDE (bkz. card_geometry.smoothstep).
+#
+# Yenileme hızı bu işin AÇIKLAMASI DEĞİL — bir ara bu sanılmıştı, kullanıcı
+# düzeltti: laptop 165Hz (bütçe 6.1ms), eski masaüstü 300Hz (bütçe 3.3ms).
+# Yani masaüstünün bütçesi daha DAR ve yüksek yenileme hızı takılmayı
+# gizlemez, tersine her bayat kare daha çok tazelemede ekranda kaldığı için
+# daha görünür kılar. Aynı kodun masaüstünde düzgün görünmesinin muhtemel
+# nedeni kare BÜTÇESİ değil kare MALİYETİ: orada pencere %100 ölçekte
+# (148x84 = laptoptakinin ~%64'ü kadar piksel) ve makine daha hızlı, yani
+# yeniden boyutlandırma başına düşen ~15ms çok daha küçüktü ve aynı sürede
+# çok daha fazla kare çiziliyordu. DİKKAT: bu makul bir açıklama ama
+# ÖLÇÜLMEDİ — masaüstünde ölçüm yapılmadı, kanıt sayma.
 #
 # Ölçüldü ve ELENDİ: _apply_geometry'den update_idletasks()'i çıkarmak.
 # Kulağa en büyük kazanç gibi geliyor (kare başına 17-33ms) ama izole
