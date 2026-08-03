@@ -34,8 +34,41 @@ def ease_out_cubic(t: float) -> float:
     return 1 - (1 - t) ** 3
 
 
-def interpolate(start: float, end: float, t: float) -> float:
-    return start + (end - start) * ease_out_cubic(t)
+def smoothstep(t: float) -> float:
+    """Klasik smoothstep (3t² - 2t³): iki uçta da sıfır hızla girip çıkar.
+
+    Neden kartın tween'i buna geçti (bkz. app.TWEEN_MS): pencereyi yeniden
+    boyutlandırmanın ÖLÇÜLEN maliyeti ~15ms (CTk çocukları her boyutta
+    canvas'larını yeniden çiziyor), yani 180ms'lik bir animasyonda ancak
+    ~11 AYRI konum çizilebiliyor. Kare bütçesi bu kadar darken belirleyici
+    olan eğrinin TEPE HIZI: bir karede atlanan mesafe = tepe eğim / kare
+    sayısı.
+
+    - ease_out_cubic: tepe eğim 3.0 (t=0'da) -> ölçülen adımlar
+      15, 11, 10, 8, 5, 4, 3, 3, 1 px. Mesafenin **%25'i ilk karede**:
+      bir sıçrama, ardından sürünme.
+    - CSS'in ease-in-out kübiği (4t³ / 1-(-2t+2)³/2) BU İŞE YARAMAZ:
+      tepe eğimi de 3.0, yalnızca sıçramayı ortaya taşır. Denendi ve
+      ölçüldü, en büyük adım değişmedi (0.249 -> 0.249).
+    - smoothstep: tepe eğim 1.5, yani en büyük adım YARIYA iner
+      (~1.4, 3.8, 5.6, 7.0, 7.8, 8.1, 7.9, 7.1, 5.8, 4.0, 1.7 px).
+
+    Kare sayısı aynı kalıyor; adımlar birbirine yakınlaştığı için hareket
+    "akıcı" okunuyor. Daha atak bir his istenirse interpolate(...,
+    ease=ease_out_cubic) ile eski eğriye dönülebilir.
+    """
+    t = min(1.0, max(0.0, t))
+    return t * t * (3 - 2 * t)
+
+
+def interpolate(start: float, end: float, t: float, ease=smoothstep) -> float:
+    """Eğri parametrik: çağıran taraf hangi his istediğini seçebilsin.
+
+    Varsayılan ease_in_out_cubic — kartın tween'inin kullandığı. ease_out_cubic
+    hâlâ burada ve test ediliyor; daha "atak" bir his istenirse tek argümanla
+    geri dönülebilir.
+    """
+    return start + (end - start) * ease(t)
 
 
 def tween_frames(steps: int) -> list[float]:

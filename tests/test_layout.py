@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 import app as app_module
+from card_geometry import interpolate
 from usage_client import UsageData, UsageError, Window
 
 
@@ -274,6 +275,89 @@ def test_poll_hover_only_toggles_alpha_when_expand_on_hover_is_off(widget, monke
     finally:
         widget.winfo_pointerxy = original
         widget._hovered = False
+        widget._set_expanded(False, animate=False)
+
+
+def test_tween_position_follows_the_clock_not_the_frame_count(widget, monkeypatch):
+    """Kart nerede olacağını GEÇEN SÜREden almalı, kaçıncı kare olduğundan değil.
+
+    Gerileme testi: tween eskiden adım-indeksliydi (sabit 10 adım, her
+    birinden sonra after()). Bir kare pahalıya patladığında animasyon
+    telafi etmiyor, uzuyordu; kare aralıkları düzensizleşince hareket de
+    düzensizleşiyordu ("fotoğraf karesi gibi dona dona büyüme").
+    Zaman-tabanlı modelde kareler atlansa bile her kare duvar saatinin
+    gösterdiği yere çiziyor.
+
+    Saat sahte olduğu için test zamanlamaya bağlı değil: TEK bir kare
+    tetikleyip süreyi yarıya sardığımızda kart, "ikinci kare" nerede
+    olurdu diye değil, yarı yolda olmalı.
+    """
+    widget._set_expanded(False, animate=False)
+    idle_w = _width(widget)
+    # Tween'in kendi başlangıç noktası: _tween_to winfo_width()'i mantıksala
+    # çeviriyor. Beklentiyi aynı tabandan kurmazsak yuvarlama zinciri 1px
+    # kayabiliyor — testin konusu zamanlama modeli, yuvarlama değil.
+    start_logical = round(widget.winfo_width() / widget._window_scaling())
+
+    now = [1_000.0]
+    monkeypatch.setattr(app_module.time, "monotonic", lambda: now[0])
+
+    pending = []
+    original_after = widget.after
+    monkeypatch.setattr(widget, "after",
+                        lambda delay, cb=None, *a: (pending.append(cb) or "fake")
+                        if cb is not None else original_after(delay))
+    try:
+        widget._set_expanded(True, animate=True)
+        # İlk kare t=0'da: henüz idle genişliğinde.
+        assert _width(widget) == idle_w
+        assert pending, "tween bir sonraki kareyi zamanlamalıydı"
+
+        # Saati sürenin tam yarısına al ve TEK bir kare tetikle. Adım
+        # indeksli olsaydı bu "2. kare" olurdu (mesafenin ~%27'si);
+        # zaman-tabanlıyken yarı yolun easing karşılığında olmalı.
+        now[0] += app_module.TWEEN_MS / 2000.0  # saniye
+        pending.pop(0)()
+        half = _width(widget)
+        expected_half = _scaled(widget, round(interpolate(
+            start_logical, app_module.CARD_W_EXPANDED, 0.5)))
+        assert half == pytest.approx(expected_half, abs=1)
+
+        # Kare sayısına bağlı OLMADIĞININ kanıtı: buraya TEK karede gelindi.
+        # Adım-indeksli eski modelde bu daha yeni ikinci kare olurdu, yani
+        # mesafenin ~%27'si — aradaki fark 1px'lik yuvarlamayla karışacak
+        # kadar küçük değil, gerçekten ayırt edici.
+        frame_two = _scaled(widget, round(interpolate(
+            start_logical, app_module.CARD_W_EXPANDED, 0.1)))
+        assert abs(half - frame_two) > 5
+    finally:
+        widget.after = original_after
+        widget._set_expanded(False, animate=False)
+
+
+def test_tween_last_frame_lands_exactly_on_the_target(widget, monkeypatch):
+    """Süre dolduğunda kart tam hedefte durmalı ve yeni kare zamanlanmamalı."""
+    widget._set_expanded(False, animate=False)
+    now = [2_000.0]
+    monkeypatch.setattr(app_module.time, "monotonic", lambda: now[0])
+
+    pending = []
+    original_after = widget.after
+    monkeypatch.setattr(widget, "after",
+                        lambda delay, cb=None, *a: (pending.append(cb) or "fake")
+                        if cb is not None else original_after(delay))
+    try:
+        widget._set_expanded(True, animate=True)
+        # Tek bir karede süreyi tamamen aş: animasyon kare SAYISINI
+        # beklemeden bitmeli.
+        now[0] += app_module.TWEEN_MS  # ms -> saniye olarak fazlasıyla ötesi
+        step = pending.pop(0)
+        pending.clear()
+        step()
+        assert _width(widget) == _scaled(widget, app_module.CARD_W_EXPANDED)
+        assert not pending, "t=1'e ulaşan tween yeni kare zamanlamamalı"
+    finally:
+        widget.after = original_after
         widget._set_expanded(False, animate=False)
 
 

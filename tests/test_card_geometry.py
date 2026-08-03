@@ -2,7 +2,7 @@ import pytest
 
 from card_geometry import (
     DOT_OVERLAY_BIAS_RATIO, corner_position, dot_overlay_center, ease_out_cubic,
-    glow_phase, interpolate, point_in_rect, ring_phase, tween_frames,
+    smoothstep, glow_phase, interpolate, point_in_rect, ring_phase, tween_frames,
 )
 
 
@@ -53,10 +53,46 @@ def test_ease_out_cubic_frontloads_motion():
     assert ease_out_cubic(0.5) > 0.5
 
 
+def test_smoothstep_endpoints_and_clamping():
+    assert smoothstep(0.0) == 0.0
+    assert smoothstep(1.0) == 1.0
+    assert smoothstep(-1.0) == 0.0
+    assert smoothstep(2.0) == 1.0
+
+
+def test_smoothstep_is_symmetric_around_the_midpoint():
+    assert smoothstep(0.5) == pytest.approx(0.5)
+    for t in (0.1, 0.25, 0.4):
+        assert smoothstep(t) + smoothstep(1 - t) == pytest.approx(1.0)
+
+
+def test_smoothstep_spreads_motion_more_evenly_than_ease_out():
+    """Dar kare bütçesinde asıl mesele bu: en büyük tek adım küçülmeli.
+
+    app.py'nin tween'i ~11 kare çizebiliyor; ease_out ilk karede mesafenin
+    dörtte birini harcıyordu. Aynı kare sayısında en büyük adımı ölçüyoruz.
+    """
+    frames = [i / 11 for i in range(12)]
+
+    def biggest_step(ease):
+        vals = [ease(t) for t in frames]
+        return max(vals[i] - vals[i - 1] for i in range(1, len(vals)))
+
+    assert biggest_step(smoothstep) < biggest_step(ease_out_cubic)
+    assert biggest_step(ease_out_cubic) > 0.20   # ilk kare tek başına >%20
+    assert biggest_step(smoothstep) < 0.15
+
+
 def test_interpolate_uses_eased_progress():
     assert interpolate(100, 200, 0.0) == 100
     assert interpolate(100, 200, 1.0) == 200
-    assert interpolate(100, 200, 0.5) == pytest.approx(100 + 100 * ease_out_cubic(0.5))
+    # varsayılan eğri artık smoothstep
+    assert interpolate(100, 200, 0.5) == pytest.approx(100 + 100 * smoothstep(0.5))
+
+
+def test_interpolate_accepts_a_custom_easing():
+    assert interpolate(100, 200, 0.5, ease=ease_out_cubic) == pytest.approx(
+        100 + 100 * ease_out_cubic(0.5))
 
 
 def test_tween_frames_includes_start_and_end():

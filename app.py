@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 import customtkinter as ctk
 
 from card_geometry import (corner_position, dot_overlay_center, glow_phase, interpolate,
-                          point_in_rect, ring_phase, tween_frames)
+                          point_in_rect, ring_phase)
 from crab_overlay import TRANSPARENT_KEY
 from formatting import GREEN, RED, YELLOW, color_for, format_countdown, format_reset_time, worst_color
 from usage_client import UsageData, UsageError
@@ -97,31 +97,44 @@ DOT_CANVAS_SIZE = 32
 REOPEN_SIZE = 34
 
 HOVER_POLL_MS = 50
-# DÜZELTME (bkz. user-qa-fix-report.md, Finding 3): önceki yorum burada bir
-# ~15.6ms Windows zamanlayıcı-çözünürlüğü tabanı olduğunu iddia ediyordu —
-# bu iddia yanlış çıktı. Ham after(N), begin_high_res_timer(1) açıkken de
-# kapalıyken de istenen N'e ~0.01ms hassasiyetle uyuyor; sabit bir 15.6ms
-# tabanı yok. Adım başına gerçek maliyetin asıl kaynağı zamanlayıcı
-# çözünürlüğü değil, her adımın kendi Tk/Win32 işi — _apply_geometry'nin
-# çağırdığı update_idletasks() ve set_rounded_region() (SetWindowRgn).
-# Bu ortamda uçtan uca gerçek bir tween'i ölçmek (bu dosyanın testlerinden
-# ayrı, elle sürülmüş bir UsageApp() üzerinde) bu win32 işinin, istenen
-# adım gecikmesinden bağımsız olarak, adım başına ~14-16ms sabit gider
-# eklediğini gösterdi — bu yüzden istenen gecikmeyi küçültmenin faydası
-# sınırlı, çünkü STEPS × bu sabit gider toplam süreyi domine ediyor.
-# TWEEN_STEPS=5 bu yüzden fazla düzeltilmişti: ease_out_cubic en dik t=0
-# civarında olduğundan, 5 tekdüze adımla İLK karenin kendisi toplam
-# mesafenin %48.8'ini kat ediyordu — tween 2-3 karelik bir sıçrama gibi
-# okunuyordu, pürüzsüz bir animasyon değil. TWEEN_STEPS=10 iki katı kare
-# sayısı veriyor; TWEEN_MS=40 bu ortamda ölçülen ~145-149ms gerçek uçtan
-# uca süreyle istenen 120-150ms aralığına giriyor (bkz. scratchpad
-# ölçümleri, user-qa-fix-report.md). timeBeginPeriod/timeEndPeriod
-# çağrıları (begin_high_res_timer/end_high_res_timer) yine de tutuluyor —
-# ölçülen bir sorunu çözdükleri için değil, after()-tabanlı animasyon için
-# standart savunmacı pratik olduğu ve ölçülen hiçbir zararları olmadığı
-# için.
-TWEEN_MS = 40
-TWEEN_STEPS = 10
+# TWEEN_MS artık animasyonun GERÇEK toplam süresi (eskiden 40'tı ve hiçbir
+# şeyin süresi değildi: adım gecikmesi × adım sayısı hesabı ölçülen 132-174ms
+# ile alakasızdı — sabit yalan söylüyordu).
+#
+# Neden adım-indeksli tween'den zaman-tabanlısına geçildi: eski döngü
+# "10 adım at, her birinden sonra after(4)" diyordu, yani konumu KARE
+# SAYISI belirliyordu. Bir kare pahalıya patlarsa (ölçüldü: _apply_geometry
+# içindeki update_idletasks tek başına 17-33ms — CTk çocukları pencere her
+# yeniden boyutlandığında canvas'larını yeniden çiziyor) animasyon telafi
+# etmiyor, sadece uzuyordu. Ölçülen kare aralıkları bu yüzden 5, 7, 18, 12,
+# 19, 12, 16... gibi düzensizdi ve düzensiz kare ARALIĞI doğrudan düzensiz
+# HAREKET demekti — kullanıcının "fotoğraf karesi gibi dona dona büyüyor"
+# tarifi tam olarak buydu.
+#
+# Zaman-tabanlı modelde konum duvar saatinin fonksiyonu: t = geçen/TWEEN_MS.
+# Kareler yine düzensiz gelebilir ama her kare "şu an nerede olmalıysam"
+# oraya çiziyor, dolayısıyla düzensiz kare teslimi düzensiz hareket
+# üretmiyor. Yavaş bir makine kare DÜŞÜRÜR, animasyonu uzatmaz.
+#
+# Bu makinede ölçülen SON durum: kare aralığı jitter'ı 3.8-7.1ms -> 1.7-2.6ms
+# ve süre artık gerçekten TWEEN_MS (ölçülen 186ms). Kare SAYISI kasten hedef
+# değil (~12'de kaldı): bir yeniden boyutlandırmanın ölçülen ~15ms'lik CTk
+# yeniden çizim maliyeti tavanı koyuyor, o yüzden asıl kazanç kare sayısında
+# değil, adımların DÜZENLİLİĞİNDE (bkz. card_geometry.smoothstep). Ekran
+# 165Hz -> kare bütçesi 6.1ms; yenileme hızı makineye göre değişir (eski
+# masaüstü büyük olasılıkla 60Hz'di, orada aynı kod düzgün görünüyordu) —
+# bu yüzden hedef "N kare" değil, kare sayısından BAĞIMSIZ düzgün hareket.
+#
+# Ölçüldü ve ELENDİ: _apply_geometry'den update_idletasks()'i çıkarmak.
+# Kulağa en büyük kazanç gibi geliyor (kare başına 17-33ms) ama izole
+# ölçümde sonucu KÖTÜLEŞTİRDİ (24 kare -> 20), üstelik bölge kırpmasını ve
+# nokta overlay'ini pencerenin gerçek boyutundan bir kare geriye
+# düşürüyordu. Tekrar denemeye değmez.
+TWEEN_MS = 180
+# Bir sonraki kareyi "mümkün olan en kısa sürede" iste: gerçek tempoyu
+# zaten karenin kendi işi belirliyor (~8ms), sabit bir gecikme eklemek
+# yalnızca kare sayısını düşürür. Süreyi bu sabit değil TWEEN_MS belirliyor.
+TWEEN_FRAME_MS = 1
 RING_TICK_MS = 60
 
 
@@ -644,21 +657,41 @@ class UsageApp(ctk.CTk):
         start_w = round(self.winfo_width() / s)
         start_h = round(self.winfo_height() / s)
         start_alpha = float(self.attributes("-alpha"))
-        frames = tween_frames(TWEEN_STEPS)
-        step_delay = max(1, TWEEN_MS // TWEEN_STEPS)
+        # Duvar saati referansı: t artık kaçıncı karede olduğumuza değil,
+        # başlangıçtan bu yana geçen gerçek süreye bağlı (bkz. TWEEN_MS).
+        # time.monotonic, _tick_ring'in kullandığıyla aynı saat — geri
+        # gitmediği garanti, sistem saati değişse bile animasyon bozulmaz.
+        start_time = time.monotonic()
 
-        def step(i):
+        last_size = [None]
+
+        def step():
             if token != self._tween_token:
                 return
-            t = frames[i]
+            elapsed_ms = (time.monotonic() - start_time) * 1000.0
+            t = min(1.0, elapsed_ms / TWEEN_MS)
             w = round(interpolate(start_w, target_w, t))
             h = round(interpolate(start_h, target_h, t))
             alpha = interpolate(start_alpha, target_alpha, t)
-            self._apply_geometry(w, h, alpha)
-            if i + 1 < len(frames):
-                self.after(step_delay, lambda: step(i + 1))
+            if (w, h) == last_size[0] and t < 1.0:
+                # Kare, bir öncekiyle AYNI piksel boyutuna denk geldi
+                # (kareler pikselden hızlı geliyor). Ölçümde her boyut tam
+                # iki kez uygulanıyordu: biri ucuz, diğeri ~12ms — ve o
+                # 12ms hiçbir görsel değişiklik üretmeden, asıl YENİ
+                # konumlara gidecek bütçeyi yiyordu. Görünürde değişen tek
+                # şey alfa; onu uygulayıp geometri/bölge/nokta işini
+                # tamamen atlıyoruz.
+                self.attributes("-alpha", alpha)
+            else:
+                last_size[0] = (w, h)
+                self._apply_geometry(w, h, alpha)
+            # Bitiş koşulu t'ye bakıyor, kare sayısına değil: son kare her
+            # zaman tam olarak hedefe (t=1.0) oturur, yani animasyon
+            # "neredeyse varmış" bir yerde asılı kalamaz.
+            if t < 1.0:
+                self.after(TWEEN_FRAME_MS, step)
 
-        step(0)
+        step()
 
     def _poll_hover_once(self):
         if not self.winfo_ismapped():
